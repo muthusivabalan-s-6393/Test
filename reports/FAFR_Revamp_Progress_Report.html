@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAFR Revamp Progress Report — IR &amp; SR</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --success: #0d9f6e;
+            --warning: #f59e0b;
+            --danger: #dc2626;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --muted: #64748b;
+            --border: #e2e8f0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+            color: #fff;
+            padding: 40px 0;
+            text-align: center;
+        }
+        .header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+        .header p { opacity: 0.85; font-size: 1rem; }
+        .header .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 16px;
+            border-radius: 20px;
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+        .section { margin-bottom: 40px; }
+        .section-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 8px;
+            margin-bottom: 20px;
+        }
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            text-align: center;
+            border-top: 4px solid var(--primary);
+        }
+        .stat-card.success { border-top-color: var(--success); }
+        .stat-card.warning { border-top-color: var(--warning); }
+        .stat-card.danger { border-top-color: var(--danger); }
+        .stat-card .number { font-size: 2.5rem; font-weight: 800; color: var(--text); }
+        .stat-card .label { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+        .progress-bar-container {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 28px;
+            overflow: hidden;
+            margin: 16px 0;
+            position: relative;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, var(--success), #34d399);
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+        thead { background: #f1f5f9; }
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+        }
+        td {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+        tr:hover { background: #f8fafc; }
+        .badge-green {
+            background: #d1fae5; color: #065f46;
+            padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;
+        }
+        .badge-yellow {
+            background: #fef3c7; color: #92400e;
+            padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;
+        }
+        .badge-red {
+            background: #fee2e2; color: #991b1b;
+            padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;
+        }
+        .badge-blue {
+            background: #dbeafe; color: #1e40af;
+            padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600;
+        }
+        .timeline { position: relative; padding-left: 32px; }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 28px;
+            background: var(--card);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -26px;
+            top: 24px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--primary);
+            border: 3px solid #fff;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+        .timeline-item h3 { font-size: 1rem; color: var(--primary); margin-bottom: 4px; }
+        .timeline-item .date { font-size: 0.78rem; color: var(--muted); margin-bottom: 10px; }
+        .timeline-item ul { padding-left: 20px; }
+        .timeline-item li { margin-bottom: 4px; font-size: 0.88rem; }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.82rem;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            color: #be185d;
+        }
+        .prompt-box {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px 20px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            overflow-x: auto;
+        }
+        .prompt-box .label {
+            color: #38bdf8;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+        .footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--muted);
+            font-size: 0.82rem;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <h1>📋 FAFR Revamp Progress Report</h1>
+    <p>Form Add/Edit Form Rules — UI to API Conversion for Incident Request &amp; Service Request</p>
+    <div class="badge">Generated: March 20, 2026 &nbsp;|&nbsp; Project: RL140 &nbsp;|&nbsp; Module: RequestFAFR</div>
+</div>
+
+<div class="container">
+
+<!-- ================================================================ -->
+<!-- SECTION 1: EXECUTIVE SUMMARY -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">1. Executive Summary</h2>
+    <div class="card-grid">
+        <div class="stat-card success">
+            <div class="number">101</div>
+            <div class="label">Test Methods Converted<br>(OnFormLoad Event)</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="number">100</div>
+            <div class="label">OnFormLoad Methods<br>Remaining</div>
+        </div>
+        <div class="stat-card">
+            <div class="number">607</div>
+            <div class="label">Total OnFieldChange +<br>OnFormSubmit Remaining</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="number">1,046</div>
+            <div class="label">Total SAVE_RULE<br>(UI-based) Remaining</div>
+        </div>
+    </div>
+
+    <h3 style="margin-bottom:8px;">OnFormLoad Conversion Progress</h3>
+    <div class="progress-bar-container">
+        <div class="progress-bar" style="width: 50.2%;">101 / 201 (50.2%)</div>
+    </div>
+
+    <table>
+        <thead><tr><th>Metric</th><th>Count</th><th>Status</th></tr></thead>
+        <tbody>
+            <tr><td>Total OnFormLoad Condition Methods</td><td>201</td><td><span class="badge-blue">Total</span></td></tr>
+            <tr><td>Converted to API-based (preProcess)</td><td>101</td><td><span class="badge-green">Done</span></td></tr>
+            <tr><td>Remaining OnFormLoad (Date + UDF + Special)</td><td>100</td><td><span class="badge-yellow">Pending</span></td></tr>
+            <tr><td>OnFieldChange Methods (all pending)</td><td>376</td><td><span class="badge-yellow">Pending</span></td></tr>
+            <tr><td>OnFormSubmit Methods (all pending)</td><td>231</td><td><span class="badge-yellow">Pending</span></td></tr>
+            <tr><td>Total File Lines (RequestFAFR.java)</td><td>58,997</td><td>—</td></tr>
+            <tr><td>Total File Lines (IncidentFAFR.java)</td><td>1,080</td><td>—</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 2: CONVERTED METHODS BREAKDOWN -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">2. Converted Methods — Detailed Breakdown</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>PreProcess Group</th>
+                <th>Methods</th>
+                <th>Condition Fields Covered</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td><code>createFAFRWithCondition_OFL</code></td>
+                <td><strong>72</strong></td>
+                <td>
+                    ApprovalStatus IS_EMPTY (1), Category (4), EmailsToNotify (8), Group (4), Impact (4),
+                    ImpactDetails (8), Item (4), Level (4), Mode (4), Priority (4), RequestType (4),
+                    Requester Empty/NotEmpty (2), RequesterDept Empty (1), RequesterJobTitle Empty (1),
+                    Status (3), SubCategory (4), Subject (8), Technician Empty/NotEmpty (2), Urgency (4)
+                </td>
+            </tr>
+            <tr>
+                <td>2</td>
+                <td><code>createFAFRWithCondition_OFL_AdminUser</code></td>
+                <td><strong>5</strong></td>
+                <td>Technician IS (1), Technician IS_NOT (1), LoggedInUser IS (1), LoggedInUser IS_NOT (1), Requester IS (1)</td>
+            </tr>
+            <tr>
+                <td>3</td>
+                <td><code>createFAFRWithCondition_OFL_SubField</code></td>
+                <td><strong>5</strong></td>
+                <td>LoggedInUserRole IS (1), LoggedInUserRole IS_NOT (1), LoggedInUserRole NotEmpty (1), RequesterDept Empty (1), RequesterJobTitle Empty (1)</td>
+            </tr>
+            <tr>
+                <td>4</td>
+                <td><code>createFAFRWithCondition_OFL_UpdateReason</code></td>
+                <td><strong>8</strong></td>
+                <td>UpdateReason IS (1), IS_NOT (1), Empty (1), NotEmpty (1), Contains (1), NotContains (1), BeginsWith (1), EndsWith (1)</td>
+            </tr>
+            <tr>
+                <td>5</td>
+                <td><code>createRequesterWithFAFR_OFL</code></td>
+                <td><strong>11</strong></td>
+                <td>RequesterIsNot (1), RequesterDept IS/IS_NOT/NotEmpty (3), RequesterJobTitle IS/IS_NOT/NotEmpty/Contains/NotContains/BeginsWith/EndsWith (7)</td>
+            </tr>
+            <tr style="background: #f0fdf4; font-weight: 700;">
+                <td></td>
+                <td>TOTAL CONVERTED</td>
+                <td><strong>101</strong></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 3: REMAINING METHODS -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">3. Remaining Methods — Pending Conversion</h2>
+
+    <h3 style="margin-bottom:12px;">3.1 OnFormLoad — Remaining (100 methods)</h3>
+    <table>
+        <thead>
+            <tr><th>Category</th><th>Count</th><th>Reason / Blocker</th><th>New PreProcess Needed</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>UDF Fields (Email, Multiline, MultiSelect, Numeric, Phone, PickList, Singleline, WebURL)</td>
+                <td><strong>58</strong></td>
+                <td>Requires UDF field creation via API before FAFR rule creation</td>
+                <td><code>createUdfWithFAFR_OFL</code></td>
+            </tr>
+            <tr>
+                <td>Date Fields (CompletedTime, CreatedDate, DueByDate, RespondedDate, ResponseDueByDate)</td>
+                <td><strong>30</strong></td>
+                <td>Requires date format values (<code>today</code>, <code>greater_than</code>, etc.) for API condition</td>
+                <td><code>createFAFRWithDateCondition_OFL</code></td>
+            </tr>
+            <tr>
+                <td>UDF Date Fields</td>
+                <td><strong>6</strong></td>
+                <td>Requires UDF creation + date format handling</td>
+                <td><code>createUdfDateWithFAFR_OFL</code></td>
+            </tr>
+            <tr>
+                <td>Approval Status Special (IS_NOT, IS_NOT_EMPTY)</td>
+                <td><strong>2</strong></td>
+                <td>Requires <code>rejectTheRequest</code> + <code>switchToUserSession</code></td>
+                <td><code>createApprovalStatusFAFR_OFL</code></td>
+            </tr>
+            <tr>
+                <td>Site Special (IS)</td>
+                <td><strong>1</strong></td>
+                <td>Requires <code>createReferSiteField</code></td>
+                <td><code>createSiteFAFR_OFL</code></td>
+            </tr>
+            <tr>
+                <td>VIP User Special (IS, IS_NOT)</td>
+                <td><strong>3</strong></td>
+                <td>Requires <code>markVIPUser</code> / <code>unMarkVIPUser</code></td>
+                <td><code>createVipUserFAFR_OFL</code></td>
+            </tr>
+            <tr style="background: #fffbeb; font-weight: 700;">
+                <td>TOTAL REMAINING (OnFormLoad)</td>
+                <td><strong>100</strong></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 style="margin-bottom:12px; margin-top:24px;">3.2 Other Events — Pending (607 methods)</h3>
+    <table>
+        <thead><tr><th>Event Type</th><th>Method Count</th><th>PreProcess Ready?</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>On Field Change (OFC)</td>
+                <td><strong>376</strong></td>
+                <td><span class="badge-green">Yes</span> — <code>createFAFRWithCondition_OFC</code> defined, 0 methods converted yet</td>
+            </tr>
+            <tr>
+                <td>On Form Submit (OFS)</td>
+                <td><strong>231</strong></td>
+                <td><span class="badge-green">Yes</span> — <code>createFAFRWithCondition_OFS</code> defined, 0 methods converted yet</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 4: STEPS PERFORMED (TIMELINE) -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">4. Steps Performed — Revamp Timeline</h2>
+    <div class="timeline">
+
+        <div class="timeline-item">
+            <h3>Step 1 — File Understanding &amp; Memorization</h3>
+            <div class="date">Day 1</div>
+            <ul>
+                <li>Read and memorized <code>IncidentFAFR.java</code> (1,080 lines) — class structure, all scenario methods, overridden methods</li>
+                <li>Read and memorized <code>RequestFAFR.java</code> <code>preProcess</code> method — all 14 existing groups</li>
+                <li>Understood the polymorphism pattern: <code>addTemplate()</code>, <code>chooseFormRule()</code>, <code>addEnableRuleWithTemplates()</code> overridden in IncidentFAFR</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 2 — checkDisableRuleFunctionUnderGearIcon Revamp</h3>
+            <div class="date">Day 1</div>
+            <ul>
+                <li>Analyzed existing method in parent <code>RequestFAFR.java</code> — understood how it works for both IR and SR via Java polymorphism</li>
+                <li>Traced the full execution flow when <code>Class&lt;?&gt; entity = IncidentFAFR.class</code></li>
+                <li>Explained how <code>addTemplate()</code> → <code>addEnableRuleWithTemplates()</code> → <code>chooseFormRule()</code> are resolved at runtime</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 3 — Full FAFR Package Read &amp; Analysis</h3>
+            <div class="date">Day 1</div>
+            <ul>
+                <li>Read all <strong>6 files</strong> in the FAFR package without skipping:</li>
+                <li><code>RequestFAFR.java</code> (61,648 lines) — parent class with ~1,100+ scenarios</li>
+                <li><code>IncidentFAFR.java</code> (1,063 lines) — incident overrides</li>
+                <li><code>ServiceFAFR.java</code> (3,505 lines) — editor/VIP/approver scenarios</li>
+                <li><code>RequestFAFRForRequester.java</code> (488 lines) — requester role tests</li>
+                <li><code>IncidentFAFRForRequester.java</code> (91 lines) — incident requester overrides</li>
+                <li><code>ServiceFAFRForRequester.java</code> (22 lines) — empty, inherits parent</li>
+                <li>Documented the complete class hierarchy</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 4 — UI to API Conversion Analysis &amp; Classification</h3>
+            <div class="date">Day 1–2</div>
+            <ul>
+                <li>Classified all scenarios into 3 categories:</li>
+                <li><strong>Category A</strong> — Already API-based (~15 methods) ✅</li>
+                <li><strong>Category B</strong> — Pure UI-validation tests (~30 methods, must stay UI) ✅</li>
+                <li><strong>Category C</strong> — Convertible (~1,000+ methods with UI rule creation) 🔄</li>
+                <li>Identified 13 distinct action types and 3 event types</li>
+                <li>Created comprehensive conversion plan</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 5 — First 5 Methods Converted (Prototype)</h3>
+            <div class="date">Day 2</div>
+            <ul>
+                <li>Created initial helper method <code>addRuleWithConditionAndSetValueAction()</code></li>
+                <li>Added <code>getFafrModuleName()</code> — polymorphic (returns <code>"service"</code> in parent, <code>"incident"</code> in IncidentFAFR)</li>
+                <li>Converted 5 methods: Category IS/IS_NOT/Empty/NotEmpty + ApprovalStatus IS_EMPTY</li>
+                <li>Verified working for both IR and SR via polymorphism</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 6 — PostProcess Failure Fix</h3>
+            <div class="date">Day 2</div>
+            <ul>
+                <li><strong>Bug discovered</strong>: PostProcess failed — template/service_category couldn't be deleted (request still referenced them)</li>
+                <li><strong>Root cause</strong>: Test creates request via UI <code>FORM_SUBMIT</code> but never stored <code>request_id</code> in LocalStorage</li>
+                <li><strong>First attempt</strong>: <code>storeRequestIdFromEditPage()</code> — failed because <code>LOCATOR_FOR_FIND_REQUEST_ID</code> not available after FORM_SUBMIT</li>
+                <li><strong>Final fix</strong>: <code>storeRequestIdBySubject()</code> — pure API approach using <code>restAPI.getEntityIDUsingFieldValue("requests", "subject", typedSubject)</code></li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 7 — Comprehensive Helper Architecture</h3>
+            <div class="date">Day 2</div>
+            <ul>
+                <li>Built <code>createFafrRule()</code> — master method handling all 13 action types × 3 event types</li>
+                <li>Created 3 action builders: <code>buildSetValueAction</code>, <code>buildFieldListAction</code>, <code>buildOptionsAction</code></li>
+                <li>Created 12 convenience wrappers for common patterns</li>
+                <li>Converted 5 more methods (Group + Impact)</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 8 — Refactored to Manual Pattern (FAFRAPIUtil + JSON)</h3>
+            <div class="date">Day 3</div>
+            <ul>
+                <li><strong>User instruction</strong>: "Should we follow the same approach and reuse/create preprocess methods as done earlier?"</li>
+                <li>Replaced AI-generated inline JSON approach with established manual pattern:</li>
+                <li>Uses <code>FAFRAPIUtil.createRequestFAFR2(inputData)</code> — same utility as manually-created preProcess groups</li>
+                <li>Uses JSON data files with <code>$(custom_*)</code> placeholders — same pattern as existing FAFR data</li>
+                <li>Created 4 JSON entries in <code>form_rules_data.json</code></li>
+                <li><strong>Removed 175+ lines</strong> of utility code (<code>createFafrRule</code>, builders, wrappers)</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 9 — Separate PreProcess per Event Type</h3>
+            <div class="date">Day 3</div>
+            <ul>
+                <li><strong>User instruction</strong>: "Need different preprocess for each event"</li>
+                <li>Split single <code>createFAFRWithCondition</code> into 3 dedicated groups:</li>
+                <li><code>createFAFRWithCondition_OFL</code> — On Form Load</li>
+                <li><code>createFAFRWithCondition_OFC</code> — On Field Change</li>
+                <li><code>createFAFRWithCondition_OFS</code> — On Form Submit</li>
+                <li>Created shared helper <code>createFAFRWithConditionValue()</code></li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 10 — Batch Conversion: 70 Standard Methods</h3>
+            <div class="date">Day 3–4</div>
+            <ul>
+                <li>Converted all standard condition methods in bulk:</li>
+                <li>ImpactDetails (6), EmailsToNotify (8), Item (4), Level (4), Mode (4), Priority (4), RequestType (4), Requester Empty/NotEmpty (2), Status (3), SubCategory (4), Subject (8), Urgency (4)</li>
+                <li>Enhanced preProcess with <code>"direct"</code>, <code>"random"</code> markers for text field conditions</li>
+                <li>Added <code>$(custom_actionField)</code> placeholder for Subject methods (action on <code>impact_details</code> instead of <code>subject</code>)</li>
+            </ul>
+        </div>
+
+        <div class="timeline-item">
+            <h3>Step 11 — New PreProcess Groups for Special Cases</h3>
+            <div class="date">Day 4–5</div>
+            <ul>
+                <li>Created <code>createFAFRWithCondition_OFL_AdminUser</code> — for Technician IS/IS_NOT, LoggedInUser IS/IS_NOT, Requester IS (5 methods)</li>
+                <li>Created <code>createFAFRWithCondition_OFL_SubField</code> — for LoggedInUserRole, RequesterDept, RequesterJobTitle sub-field criteria (5 methods)</li>
+                <li>Created <code>createFAFRWithCondition_OFL_UpdateReason</code> — for UpdateReason (creates 2 FAFR rules: Rule1 sets update_reason, Rule2 checks condition) (8 methods)</li>
+                <li>Created <code>createRequesterWithFAFR_OFL</code> — for methods needing requester user creation + dept/job_title assignment (11 methods)</li>
+            </ul>
+        </div>
+
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 5: CHANGES IMPLEMENTED -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">5. Changes Implemented — Technical Details</h2>
+
+    <h3 style="margin-bottom:12px;">5.1 New PreProcess Groups Added (8 total)</h3>
+    <table>
+        <thead>
+            <tr><th>#</th><th>PreProcess Group</th><th>Event</th><th>dataIds Format</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td><td><code>createFAFRWithCondition_OFL</code></td><td>on_form_load</td>
+                <td><code>{field, operator, entityPath, value [, actionField]}</code></td>
+                <td>Standard condition with set_value action. Supports entity resolution, <code>"direct"</code>, <code>"random"</code> markers</td>
+            </tr>
+            <tr>
+                <td>2</td><td><code>createFAFRWithCondition_OFC</code></td><td>on_field_change</td>
+                <td><code>{field, operator, entityPath, value, triggerField}</code></td>
+                <td>On Field Change with trigger field (ready for use, 0 methods converted)</td>
+            </tr>
+            <tr>
+                <td>3</td><td><code>createFAFRWithCondition_OFS</code></td><td>on_form_submit</td>
+                <td><code>{field, operator, entityPath, value}</code></td>
+                <td>On Form Submit (ready for use, 0 methods converted)</td>
+            </tr>
+            <tr>
+                <td>4</td><td><code>createFAFRWithCondition_OFL_AdminUser</code></td><td>on_form_load</td>
+                <td><code>{field, operator}</code></td>
+                <td>Uses <code>sessionDetails.getAdmin()</code> entity ID as condition value</td>
+            </tr>
+            <tr>
+                <td>5</td><td><code>createFAFRWithCondition_OFL_SubField</code></td><td>on_form_load</td>
+                <td><code>{field.subfield, operator, entityPath, value}</code></td>
+                <td>Sub-field criteria (e.g., <code>logged_in_user.role</code>, <code>requester.department</code>)</td>
+            </tr>
+            <tr>
+                <td>6</td><td><code>createFAFRWithCondition_OFL_UpdateReason</code></td><td>on_form_load</td>
+                <td><code>{field, operator, entityPath, value}</code></td>
+                <td>Creates 2 FAFR rules — Rule1 sets update_reason (match_all), Rule2 checks condition</td>
+            </tr>
+            <tr>
+                <td>7</td><td><code>createRequesterWithFAFR_OFL</code></td><td>on_form_load</td>
+                <td><code>{field, operator, entityPath, value, userKey, attrType, attrValue}</code></td>
+                <td>Creates requester user + assigns dept/job_title + FAFR rule</td>
+            </tr>
+            <tr>
+                <td>8</td><td><code>createRequester</code> <em>(existing)</em></td><td>—</td>
+                <td><code>{}</code></td>
+                <td>Pre-existing group — creates requester user only (not modified)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 style="margin-bottom:12px; margin-top:24px;">5.2 JSON Data Entries Added (4 entries in <code>form_rules_data.json</code>)</h3>
+    <table>
+        <thead><tr><th>JSON Key</th><th>Event</th><th>On Field Change</th><th>Criteria Values</th><th>Placeholders Used</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>fafr_condition_with_value</code></td><td><code>$(custom_executeWhen)</code></td><td>—</td><td>Yes</td>
+                <td><code>$(custom_moduleName)</code>, <code>$(custom_template_id)</code>, <code>$(custom_criteriaField)</code>, <code>$(custom_criteriaCondition)</code>, <code>$(custom_criteriaValue)</code>, <code>$(custom_actionField)</code>, <code>$(custom_actionValue)</code></td>
+            </tr>
+            <tr>
+                <td><code>fafr_condition_without_value</code></td><td><code>$(custom_executeWhen)</code></td><td>—</td><td>No</td>
+                <td>Same as above minus <code>$(custom_criteriaValue)</code></td>
+            </tr>
+            <tr>
+                <td><code>fafr_condition_with_value_ofc</code></td><td><code>$(custom_executeWhen)</code></td><td><code>$(custom_onFieldChangeOf)</code></td><td>Yes</td>
+                <td>Same as first + <code>$(custom_onFieldChangeOf)</code></td>
+            </tr>
+            <tr>
+                <td><code>fafr_condition_without_value_ofc</code></td><td><code>$(custom_executeWhen)</code></td><td><code>$(custom_onFieldChangeOf)</code></td><td>No</td>
+                <td>Same as second + <code>$(custom_onFieldChangeOf)</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 style="margin-bottom:12px; margin-top:24px;">5.3 Helper Methods Added</h3>
+    <table>
+        <thead><tr><th>File</th><th>Method</th><th>Line</th><th>Purpose</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>RequestFAFR.java</code></td>
+                <td><code>getFafrModuleName()</code></td>
+                <td>58693</td>
+                <td>Returns <code>"service"</code> — polymorphic, overridden in IncidentFAFR to return <code>"incident"</code></td>
+            </tr>
+            <tr>
+                <td><code>RequestFAFR.java</code></td>
+                <td><code>createFAFRWithConditionValue()</code></td>
+                <td>432</td>
+                <td>Shared helper — handles condition value resolution (direct/random/entity/requester_user) and calls <code>FAFRAPIUtil.createRequestFAFR2()</code></td>
+            </tr>
+            <tr>
+                <td><code>RequestFAFR.java</code></td>
+                <td><code>openRequestAddFormFromLocalStorage()</code></td>
+                <td>58331</td>
+                <td>Opens add form using <code>template_name</code> from LocalStorage</td>
+            </tr>
+            <tr>
+                <td><code>RequestFAFR.java</code></td>
+                <td><code>storeRequestIdBySubject()</code></td>
+                <td>58340</td>
+                <td>API-based request ID capture — finds request by subject, stores <code>request_id</code> for postProcess cleanup</td>
+            </tr>
+            <tr>
+                <td><code>RequestFAFR.java</code></td>
+                <td><code>createRequestFromLocalStorage()</code></td>
+                <td>58354</td>
+                <td>Creates request via API using <code>template_id</code> from LocalStorage</td>
+            </tr>
+            <tr>
+                <td><code>IncidentFAFR.java</code></td>
+                <td><code>getFafrModuleName()</code></td>
+                <td>909</td>
+                <td>Override — returns <code>"incident"</code> for incident module FAFR rules</td>
+            </tr>
+            <tr>
+                <td><code>IncidentFAFR.java</code></td>
+                <td><code>openRequestAddFormFromLocalStorage()</code></td>
+                <td>712</td>
+                <td>Override — opens incident add form using template_name from LocalStorage</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 style="margin-bottom:12px; margin-top:24px;">5.4 PostProcess Cleanup</h3>
+    <table>
+        <thead><tr><th>Feature</th><th>Detail</th></tr></thead>
+        <tbody>
+            <tr><td>Cleanup trigger</td><td><code>group.contains("createFAFRWithCondition")</code> — matches all 7 new groups automatically</td></tr>
+            <tr><td>Deletion order</td><td><code>request_id</code> → <code>fafrId1</code> → <code>fafrId</code> → <code>tempId</code> → <code>template_id</code> → <code>service_category_id</code></td></tr>
+            <tr><td>Dependency chain</td><td>Request → FAFR → Template → ServiceCategory (each must be deleted before the next)</td></tr>
+        </tbody>
+    </table>
+
+    <h3 style="margin-bottom:12px; margin-top:24px;">5.5 IR / SR Polymorphism — How It Works</h3>
+    <table>
+        <thead><tr><th>Step</th><th>ServiceFAFR (SR)</th><th>IncidentFAFR (IR)</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>addTemplate()</code></td>
+                <td>Parent version → creates Service template (with service_category, is_service_template, cost_details)</td>
+                <td><strong>Override</strong> → removes SR-specific fields, creates Incident template</td>
+            </tr>
+            <tr>
+                <td><code>getFafrModuleName()</code></td>
+                <td>Returns <code>"service"</code> → JSON: <code>module.name = "service"</code></td>
+                <td><strong>Override</strong> → returns <code>"incident"</code> → JSON: <code>module.name = "incident"</code></td>
+            </tr>
+            <tr>
+                <td><code>openRequestAddFormFromLocalStorage()</code></td>
+                <td>Parent version → opens SR add form</td>
+                <td><strong>Override</strong> → opens IR add form (different navigation)</td>
+            </tr>
+            <tr>
+                <td><code>storeRequestIdBySubject()</code></td>
+                <td colspan="2">Inherited — works for both (pure API-based, no module dependency)</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 6: KEY PROMPTS / COMMANDS -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">6. Key Prompts &amp; Instructions Used During FAFR Revamp</h2>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 1 — Initial Understanding</span>
+        "Read and Understand all the each and every files which is in the fafr package without SKIPPING, it is under the request module package."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 2 — UI to API Analysis</span>
+        "First, you have to check and analyze the UI cases in the RequestFAFR.java file, if possible then change the testcases from UI to API for that if preprocess, data you need, check the existing preprocess, data or create new preprocess and data."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 3 — Prototype Conversion</span>
+        "Can you convert 5 methods first to check whether it will run for both IR and SR."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 4 — PreProcess Pattern Alignment</span>
+        "The current preprocess has been generated using AI. Previously, while revamping the Incident FAFR file, I had created several preprocess methods manually. Should we follow the same approach and reuse/create preprocess methods as done earlier, or should we proceed with the current AI-generated approach?"
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 5 — PreProcess Refactoring</span>
+        "In this checkCategoryIsConditionExecuteOnFormLoad method you creating the fafr and template in the scenario login, instead of that you can create it in the preprocess itself for the commonly."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 6 — Separate PreProcess per Event</span>
+        "Need different preprocess for each event."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 7 — No Modification Rule</span>
+        "For the remaining test methods, reuse the existing preprocess wherever no changes are required. If modifications are needed, create a new preprocess instead of altering the existing one."
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 8 — Coverage Question</span>
+        "By using This new createFAFRWithCondition_OFL preprocess how many testcases you will fix permanently without failure?"
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 9 — Batch Conversion</span>
+        "These 86 methods you will fix right? by using the createFAFRWithCondition_OFL? For both IR and SR?"
+    </div>
+
+    <div class="prompt-box">
+        <span class="label">Prompt 10 — Complete OnFormLoad</span>
+        "First convert the OnFormLoad event test methods alone. For the remaining test methods, reuse the existing preprocess wherever no changes are required. If modifications are needed, create a new preprocess instead of altering the existing one."
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 7: FILES MODIFIED -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">7. Files Modified</h2>
+    <table>
+        <thead><tr><th>File Path</th><th>Changes</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>src/.../fafr/RequestFAFR.java</code></td>
+                <td>
+                    Added 8 new preProcess groups, shared helper <code>createFAFRWithConditionValue()</code>,
+                    5 utility methods, postProcess cleanup for new groups.
+                    Converted 101 test methods from UI-based to API-based FAFR rule creation.
+                </td>
+            </tr>
+            <tr>
+                <td><code>src/.../fafr/IncidentFAFR.java</code></td>
+                <td>
+                    Added <code>getFafrModuleName()</code> override (returns <code>"incident"</code>),
+                    <code>openRequestAddFormFromLocalStorage()</code> override.
+                </td>
+            </tr>
+            <tr>
+                <td><code>resources/entity/data/.../form_rules_data.json</code></td>
+                <td>
+                    Added 4 new JSON entries: <code>fafr_condition_with_value</code>,
+                    <code>fafr_condition_without_value</code>,
+                    <code>fafr_condition_with_value_ofc</code>,
+                    <code>fafr_condition_without_value_ofc</code>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- SECTION 8: CONVERSION PATTERN -->
+<!-- ================================================================ -->
+<div class="section">
+    <h2 class="section-title">8. Before vs After — Conversion Pattern</h2>
+
+    <div class="two-col">
+        <div>
+            <h3 style="color: var(--danger); margin-bottom:8px;">❌ Before (UI-Based — ~25-30 lines per method)</h3>
+            <div class="prompt-box" style="font-size:0.75rem;">
+<span class="label">Inside each test method body</span>
+JSONObject template = addTemplate(random.generateRandomString(4));
+String rulename = random.generateRandomString(4);
+try {
+    goToFormRulesInAdminTab();
+    chooseFormRule();
+    actions.click(CREATE_RULE);
+    actions.type(RULE_NAME_FIELD, rulename);
+    // ... select condition field
+    // ... select operator
+    // ... type/select value
+    // ... select action (SET_VALUE_TO_FIELD)
+    // ... select action field (SUBJECT)
+    // ... type action value
+    // ... select template
+    actions.click(SAVE_RULE);
+    // ... open form and verify
+} finally {
+    deleteFafr(rulename);
+    restAPI.delete("service_categories/...");
+}
+            </div>
+        </div>
+        <div>
+            <h3 style="color: var(--success); margin-bottom:8px;">✅ After (API-Based — 5-10 lines per method)</h3>
+            <div class="prompt-box" style="font-size:0.75rem;">
+<span class="label">Annotation (preProcess handles setup)</span>
+@AutomaterScenario(
+    group = "createFAFRWithCondition_OFL",
+    dataIds = {"category", "is", "requests/category",
+               "Software"}
+)
+
+<span class="label">Method body (verification only)</span>
+String subjectValue = LocalStorage.getAsString("subject_value");
+openRequestAddFormFromLocalStorage();
+// ... fill fields, submit form
+// ... verify FAFR executed
+// postProcess handles cleanup automatically
+            </div>
+        </div>
+    </div>
+</div>
+
+</div><!-- container -->
+
+<!-- FOOTER -->
+<div class="footer">
+    FAFR Revamp Progress Report &nbsp;|&nbsp; Project: RL140 &nbsp;|&nbsp; Module: requests/request/fafr &nbsp;|&nbsp; March 20, 2026
+    <br>Supports both <strong>Incident Request (IR)</strong> and <strong>Service Request (SR)</strong> via Java Polymorphism
+</div>
+
+</body>
+</html>

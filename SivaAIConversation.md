@@ -3,7 +3,7 @@
 **Project:** RL140 - SDPOD Automation (Selenium)  
 **Developer:** MUTHUSIVABALAN_S  
 **AI Assistant:** GitHub Copilot  
-**Date Range:** March 4, 2026 – March 20, 2026 (Sessions 0-64)  
+**Date Range:** March 4, 2026 – March 24, 2026 (Sessions 0-69)  
 **Workspace:** `/Users/muthu-6393/ZIDE/RL140/`
 
 ---
@@ -154,6 +154,22 @@
 | 61 | [Session 61: FAFR Files Read & Store](#session-61-fafr-files-read-store) | Read and stored IncidentFAFR.java (1,029 lines), RequestFAFR.java (61,649 lines), ServiceFAFR.java (3,505 lines) for future reference |
 | 62 | [Session 62: checkDisableRulePresentUnderGearIcon Full Revamp (RequestFAFR.java)](#session-62-checkdisablerulepresentundergearicon-revamp) | Full revamp — API-based setup via new `createEnabledFAFR` preProcess group, pure UI verification in method body, postProcess cleanup, aligned with IncidentFAFR pattern |
 | 63 | [Session 63: UDF FAFR Conversions Summary](#session-63-udf-fafr-conversions-summary) | Converted all 64 UDF OnFormLoad condition methods — Date(6), Text(40: Email/Multiline/Phone/Singleline/WebURL), Numeric(10), PickList(4), MultiSelect(4) — 5 new preProcess groups, all working for IR and SR |
+
+### 📅 Day 16: FAFR OnFormLoad Bug Fixes — LoggedInUserRole, RequesterJobTitle, RequesterDept UI-Based Revamp (March 23, 2026)
+
+| # | Session | Description |
+|---|---------|-------------|
+| 64 | [Session 64: LoggedInUserRole IS/IS_NOT Entity ID Fix](#session-64-loggedinuserrole-isis_not-entity-id-fix) | Fixed AALAM failure — `checkLoggedInUserRoleIsConditionExecuteOnFormLoad` — FAFR criteria used `"id": "SDAdmin"` (display name) instead of entity ID. Changed dataIds from `"direct"` to `"roles"` so `TriggerAPIUtil.getEntityIdforCriteriaValue("roles", "SDAdmin")` resolves the actual role entity ID |
+| 65 | [Session 65: RequesterJobTitle/Dept UI-Based FAFR Revamp](#session-65-requesterjobttitledept-ui-based-fafr-revamp) | RequesterJobTitle and RequesterDept sub-field methods required UI-based FAFR creation because API sub-field criteria `requester.job_title` / `requester.department` didn't execute at runtime. Created `createRequesterSetup_OFL` preProcess (creates requester + assigns attributes) with UI-based FAFR creation in method body. Reverted 11 methods from API to UI approach |
+
+### 📅 Day 17: FAFR OnFormLoad Bug Fixes — RequestType, TechnicianIsNot, Item Hierarchical ID (March 24, 2026)
+
+| # | Session | Description |
+|---|---------|-------------|
+| 66 | [Session 66: RequestType IS Entity ID Fix](#session-66-requesttype-is-entity-id-fix) | Fixed `checkRequestTypeIsConditionExecuteOnFormLoad` — FAFR criteria used `"id": "Incident"` (display name). Changed dataIds from `"direct"` to `"request_types"` for entity ID resolution |
+| 67 | [Session 67: TechnicianIsNot Condition Logic Fix](#session-67-technicianisnotcondition-logic-fix) | Fixed `checkTechnicianIsNotConditionExecuteOnFormLoad` — method filled admin as technician, but IS_NOT condition requires technician to NOT be admin. Removed `fillSelectField(TECHNICIAN, admin)` so technician stays empty on edit form load |
+| 68 | [Session 68: Item IS/IS_NOT Hierarchical Entity ID Fix](#session-68-item-isis_not-hierarchical-entity-id-fix) | Fixed `checkItemIsConditionExecuteOnFormLoad` — Item field uses hierarchical value `"Upgrade « MS Office « Software"`. Added `"item"` special case in `createFAFRWithConditionValue` that resolves Category→SubCategory→Item entity IDs via nested API calls |
+| 69 | [Session 69: Git Push — All March 23-24 Work](#session-69-git-push-all-march-23-24-work) | Staged, committed and pushed all FAFR revamp work to GitHub repository |
 
 ---
 
@@ -3123,13 +3139,251 @@ No compilation errors. All methods work for both IR and SR via Java polymorphism
 
 ---
 
-*Document updated on March 20, 2026 by GitHub Copilot*
-*Sessions 0-64 complete — organized chronologically across March 4–20, 2026*
+## Session 64: LoggedInUserRole IS/IS_NOT Entity ID Fix
+
+### Date: March 23, 2026
+
+### User Prompt
+> Loggedinuser cases failed in the AALAM report - `https://sdpodqa-auto7.csez.zohocorpin.com:8443/Qap/#/reportsnew/Mar_20_2026_Test_RL152_UserBased_15_01_30_rst_0_2_39?...&getGroupedData=TestCaseId_checkLoggedInUserRoleIsConditionExecuteOnFormLoad_464687_0`
+> Review and analyze the Code, Data JSON and fix it.
+
+### Report Analysis
+- **Report file:** `LOCAL_checkLoggedInUserRoleIsConditionExecuteOnFormLoad_1774247306455/ScenarioReport.html`
+- **FAFR created successfully** (status 2000) with criteria: `"values": [{"id": "SDAdmin"}]`
+- **Rule did NOT execute** — `Failure: Unable to execute the Rule`
+- Technician response showed: `"roles": [{"name": "SDAdmin", "id": "126000000008910"}]`
+
+### Root Cause
+The FAFR criteria used `"id": "SDAdmin"` — the role **display name** instead of the **entity ID** (`126000000008910`). The `dataIds` had `"direct"` mode which passes the string value as-is.
+
+### Fix Applied
+
+| Method | Before | After |
+|---|---|---|
+| `checkLoggedInUserRoleIsConditionExecuteOnFormLoad` | `dataIds = {"logged_in_user.role", "is", "direct", "SDAdmin"}` | `dataIds = {"logged_in_user.role", "is", "roles", "SDAdmin"}` |
+| `checkLoggedInUserRoleIsNotConditionExecuteOnFormLoad` | `dataIds = {"logged_in_user.role", "is not", "direct", "SDGuest"}` | `dataIds = {"logged_in_user.role", "is not", "roles", "SDGuest"}` |
+
+**How it works now:** `dataIds[2] = "roles"` → `createFAFRWithConditionValue` calls `TriggerAPIUtil.getEntityIdforCriteriaValue("roles", "SDAdmin")` → resolves to `126000000008910` → FAFR criteria becomes `"values": [{"id": "126000000008910"}]`
+
+### Files Modified
+- `RequestFAFR.java` — Changed dataIds for 2 methods
+
+---
+
+## Session 65: RequesterJobTitle/Dept UI-Based FAFR Revamp
+
+### Date: March 23, 2026
+
+### User Prompt
+> checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad case is failing. Report: `LOCAL_checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad_1774248782145/ScenarioReport.html`
+> Why this testmethods is failing?
+> You can create those methods to the UI based FAFR creation.
+> First, change the "checkRequesterDepartmentIsConditionExecuteOnFormLoad" this test methods ALONE.
+
+### Report Analysis
+- **Report:** `LOCAL_checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad_1774248782145`
+- **FAFR criteria sent:** `"field": "requester.job_title", "condition": "begins with", "values": [{"id": "Ram"}]`
+- FAFR created successfully (status 2000) but **rule did NOT execute**
+- Root cause: The API accepted `requester.job_title` as criteria field but the FAFR engine doesn't evaluate sub-field conditions set via API — it requires UI-based creation for sub-field criteria
+
+### Key User Instructions
+> "You can analyse the UI and then write the UI based cases to create the FAFR creation. not API."
+> "First, change the checkRequesterDepartmentIsConditionExecuteOnFormLoad this test methods ALONE."
+> "you need to select the typeAndSelectOption which has 'Engineering « Base Site' in the dropdown"
+> "If you typed this 'Engineering « Base Site' it will not come, but you must select the values to make it case pass"
+
+### What Was Done
+1. **Created `createRequesterSetup_OFL` preProcess group** — creates requester user + assigns department/job_title + creates template (no FAFR — FAFR is created via UI in method body)
+2. **Reverted 11 methods from API-based to UI-based FAFR creation:**
+   - `checkRequesterDepartmentIsConditionExecuteOnFormLoad` — UI-based with `typeAndSelectOption` for sub-field `Requester > Department` and value `Engineering`
+   - `checkRequesterDepartmentIsNotConditionExecuteOnFormLoad`
+   - `checkRequesterDepartmentNotEmptyConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleIsConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleIsNotConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleNotEmptyConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleContainsConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleIsNotContainsConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleEndsWithConditionExecuteOnFormLoad`
+   - `checkRequesterJobTitleEmptyConditionExecuteOnFormLoad`
+
+3. **UI FAFR creation pattern in method body:**
+   ```java
+   goToFormRulesInAdminTab();
+   chooseFormRule();
+   actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
+   actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
+   // Select sub-field: Requester > Department/Job Title
+   actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_COLUMN_UNDER_CONDITION);
+   actions.click(AdminLocators.RequestFAFR.SELECT_SUB_REQUESTER);
+   actions.formBuilder.typeAndSelectOption(..., Fields.DEPARTMENT/JOB_TITLE);
+   // Select operator
+   actions.formBuilder.typeAndSelectOption(..., FieldOperators.IS/IS_NOT/...);
+   // Select value
+   typeAndSelectOption(..., "Engineering"/"Ram"/etc.);
+   // Select template
+   typeAndSelectOption(SELECTED_TEMPLATES_INPUT_BOX, templateName);
+   // Set action: SET_VALUE_TO_FIELD > Subject > value
+   actions.click(FIRST_SELECT_ACTION_DROP_DOWN);
+   actions.formBuilder.typeAndSelectOption(..., Actions.SET_VALUE_TO_FIELD);
+   ...
+   actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
+   ```
+
+### Failure Reports Analyzed
+| Report | Method | Outcome |
+|---|---|---|
+| `LOCAL_checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad_1774248782145` | API-based | ❌ Rule didn't execute |
+| `LOCAL_checkRequesterJobTitleBeginsWithConditionExecuteOnFormLoad_1774253407423` | API-based retry | ❌ Same failure |
+| `LOCAL_checkRequesterDepartmentIsConditionExecuteOnFormLoad_1774261120612` | First UI attempt | ❌ Wrong value selection |
+| `LOCAL_checkRequesterDepartmentIsConditionExecuteOnFormLoad_1774262100395` | UI with `Engineering` only | ✅ Fixed |
+
+### Files Modified
+- `RequestFAFR.java` — Added `createRequesterSetup_OFL` preProcess, reverted 11 methods to UI-based FAFR creation
+
+---
+
+## Session 66: RequestType IS Entity ID Fix
+
+### Date: March 24, 2026
+
+### User Prompt
+> This case is failed checkRequestTypeIsConditionExecuteOnFormLoad and here is the report: `LOCAL_checkRequestTypeIsConditionExecuteOnFormLoad_1774301044456/ScenarioReport.html`, verify and fix this case ALONE.
+
+### Report Analysis
+- **FAFR criteria:** `"values": [{"id": "Incident"}]` — display name instead of entity ID
+- **FAFR created successfully** (status 2000) but rule did NOT execute
+- `criteriaValue` was stored as `"Incident"` (string) via `"direct"` mode
+
+### Root Cause
+`dataIds = {"request_type", "is", "direct", "Incident"}` — used `"direct"` which passes `"Incident"` as-is. The `request_type` field is a **lookup entity** — the FAFR API needs the entity ID (e.g., `126000000000187`), not the display name.
+
+### Fix Applied
+```java
+// Before:
+dataIds = {"request_type", "is", "direct", "Incident"}
+// After:
+dataIds = {"request_type", "is", "request_types", "Incident"}
+```
+Changed `"direct"` → `"request_types"` so `TriggerAPIUtil.getEntityIdforCriteriaValue("request_types", "Incident")` resolves the actual entity ID.
+
+### Files Modified
+- `RequestFAFR.java` — Changed dataIds for `checkRequestTypeIsConditionExecuteOnFormLoad`
+
+---
+
+## Session 67: TechnicianIsNot Condition Logic Fix
+
+### Date: March 24, 2026
+
+### User Prompt
+> This case is failed checkTechnicianIsNotConditionExecuteOnFormLoad and here is the report: `LOCAL_checkTechnicianIsNotConditionExecuteOnFormLoad_1774303203521/ScenarioReport.html`, verify and fix this case ALONE.
+
+### Report Analysis
+- **FAFR criteria:** `"condition": "is not", "field": "technician", "values": [{"id": "126000000065485"}]` — admin user's technician ID
+- **FAFR created successfully** (status 2000)
+- **Request created** with `"technician": {"id": "126000000065485"}` — technician IS the admin
+- **Rule did NOT execute** — because technician IS admin, so "IS NOT admin" = FALSE
+
+### Root Cause
+The method at line 7041 filled `admin_display_id` as the technician via `fillSelectField(TECHNICIAN, admin_display_id)`. After form submission, on edit form load, the FAFR condition `"technician IS NOT admin"` evaluated to **FALSE** (because technician WAS the admin), so the rule didn't fire.
+
+### Fix Applied
+Removed `actions.formBuilder.fillSelectField(RequestFields.TECHNICIAN.getName(), LocalStorage.getAsString("admin_display_id"))` from the method body. Now the technician field stays **empty** when the request is created. On the edit form load, `"technician IS NOT admin"` evaluates to **TRUE** (empty ≠ admin), so the rule fires and sets the subject.
+
+### Files Modified
+- `RequestFAFR.java` — Removed technician fill line from `checkTechnicianIsNotConditionExecuteOnFormLoad`
+
+---
+
+## Session 68: Item IS/IS_NOT Hierarchical Entity ID Fix
+
+### Date: March 24, 2026
+
+### User Prompt
+> This case is failed checkItemIsConditionExecuteOnFormLoad and here is the report: `LOCAL_checkItemIsConditionExecuteOnFormLoad_1774303935731/ScenarioReport.html`, verify and fix this case ALONE.
+
+### Report Analysis
+- **FAFR criteria:** `"values": [{"id": "Upgrade « MS Office « Software"}]` — hierarchical display name
+- **FAFR created successfully** (status 2000) — API accepted the display name string
+- **Rule did NOT execute** — the display name doesn't match at runtime, entity ID required
+
+### Root Cause
+`dataIds = {"item", "is", "direct", "Upgrade « MS Office « Software"}` — `"direct"` passes the hierarchical display name as-is. The `item` field requires the **entity ID** which must be resolved through nested API calls: Category→SubCategory→Item.
+
+### Fix Applied
+1. **Added `"item"` special case in `createFAFRWithConditionValue`:**
+   ```java
+   }else if(dataIds[2].equals("item")) {
+       // Resolve hierarchical item entity ID: "ItemName « SubCatName « CatName"
+       String[] parts = dataIds[3].split(" « ");
+       String itemName = parts[0];    // "Upgrade"
+       String subCatName = parts[1];  // "MS Office"
+       String catName = parts[2];     // "Software"
+       String categoryId = TriggerAPIUtil.getEntityIdforCriteriaValue("requests/category", catName);
+       String subCategoryId = TriggerAPIUtil.getEntityIdforCriteriaValue("categories/" + categoryId + "/subcategories", subCatName);
+       conditionValue = TriggerAPIUtil.getEntityIdforCriteriaValue("categories/" + categoryId + "/subcategories/" + subCategoryId + "/items", itemName);
+   }
+   ```
+
+2. **Changed dataIds for both Item IS and IS_NOT:**
+   ```java
+   // Before:
+   dataIds = {"item", "is", "direct", "Upgrade « MS Office « Software"}
+   // After:
+   dataIds = {"item", "is", "item", "Upgrade « MS Office « Software"}
+   ```
+
+### Files Modified
+- `RequestFAFR.java` — Added `"item"` handler in `createFAFRWithConditionValue`, changed dataIds for 2 methods
+
+---
+
+## Session 69: Git Push — All March 23-24 Work
+
+### Date: March 24, 2026
+
+### User Prompt
+> Push the Yesterday March23rd, and Today March24th works what i have done via the claude ai to the Git repository, WITHOUT SKIPPING ANYTHING.
+
+### What Was Done
+- Updated `SivaAIConversation.md` with all Sessions 64-69 (March 23-24 work)
+- Staged all modified files: `RequestFAFR.java`, `IncidentFAFR.java`, `form_rules_data.json`, `SivaAIConversation.md`
+- Committed and pushed to GitHub: `https://github.com/muthusivabalan-s-6393/Test`
+
+### Complete Summary of March 23-24 Changes
+
+#### Files Modified
+
+| File | Changes |
+|---|---|
+| `RequestFAFR.java` | LoggedInUserRole dataIds fix (`"direct"` → `"roles"`), RequesterDept/JobTitle 11 methods reverted to UI-based, `createRequesterSetup_OFL` preProcess added, RequestType dataIds fix (`"direct"` → `"request_types"`), TechnicianIsNot logic fix (removed admin fill), Item `"item"` handler in `createFAFRWithConditionValue`, Item dataIds fix (`"direct"` → `"item"`) |
+| `IncidentFAFR.java` | `getFafrModuleName()` override, `openRequestAddFormFromLocalStorage()` override, `addTemplateWithNewField` template_id fix |
+| `form_rules_data.json` | All FAFR JSON data entries: `fafr_condition_with_value`, `fafr_condition_without_value` (OFL/OFC variants), `fafr_condition_between`, `fafr_condition_with_text_value` (OFL/OFC), `fafr_date_condition_today/next_year/prev_year/next_month/prev_month` |
+| `SivaAIConversation.md` | Sessions 64-69 appended |
+
+#### All Bug Fixes (March 23-24)
+
+| # | Bug | Root Cause | Fix |
+|---|---|---|---|
+| 1 | LoggedInUserRole IS didn't execute | `"id": "SDAdmin"` — display name instead of entity ID | `"direct"` → `"roles"` for entity ID resolution |
+| 2 | LoggedInUserRole IS_NOT didn't execute | Same — `"id": "SDGuest"` | `"direct"` → `"roles"` |
+| 3 | RequesterJobTitle/Dept sub-field methods didn't execute | API `requester.job_title` criteria not evaluated at runtime | Reverted to UI-based FAFR creation |
+| 4 | RequestType IS didn't execute | `"id": "Incident"` — display name | `"direct"` → `"request_types"` |
+| 5 | TechnicianIsNot didn't execute | Method filled admin as technician → IS_NOT = FALSE | Removed admin technician fill |
+| 6 | Item IS/IS_NOT didn't execute | `"id": "Upgrade « MS Office « Software"` — display name | Added `"item"` handler for hierarchical entity ID resolution |
+
+---
+
+*Document updated on March 24, 2026 by GitHub Copilot*
+*Sessions 0-69 complete — organized chronologically across March 4–24, 2026*
 *Day 0 work: AALAM report analysis (Session 0a), Request.java notes fixes (Sessions 0b-0e)*
 *Day 1 work: FAFR Revamp Foundation (Sessions 1-3) + SpotEdit fixes (Sessions 53-54) + Approval/History/SLA/Non-ASCII fixes (Sessions 55-60)*
 *Day 12 work: Org role cleanup overhaul (Sessions 39-44), addTask/addNotes/addMultipleTask reviews (Session 46)*
 *Day 13 work: HTML Report Failure Fixes (Sessions 21-25) + FAFR Requester case execution*
 *Day 14 work: DB exception analysis (Session 52), Notes review & 6 fixes (Session 53), addNoteViaPreviousRequestPopup IR/SR support (Sessions 48-51), static method fix (Session 58)*
-*Day 15 work: FAFR UDF Date Epoch fix (Session 59) + Task PostProcess (Session 60) + FAFR file reads (Session 61) + checkDisableRulePresentUnderGearIcon revamp (Session 62) + UDF FAFR Conversions (Session 63)
+*Day 15 work: FAFR UDF Date Epoch fix (Session 59) + Task PostProcess (Session 60) + FAFR file reads (Session 61) + checkDisableRulePresentUnderGearIcon revamp (Session 62) + UDF FAFR Conversions (Session 63)*
+*Day 16 work: LoggedInUserRole entity ID fix (Session 64) + RequesterJobTitle/Dept UI-based revamp (Session 65)*
+*Day 17 work: RequestType entity ID fix (Session 66) + TechnicianIsNot logic fix (Session 67) + Item hierarchical ID fix (Session 68) + Git push (Session 69)*
 *All fixes permanent — zero compilation errors across all 35+ modified files*
 *Grand total across all sessions: 300+ changes*

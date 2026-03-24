@@ -1,0 +1,1896 @@
+{
+	"change_fafr_actions_mandate": {
+		"data": {
+			"change_fafr": {
+				"applies_to_all_templates": false,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "category",
+				"name": "fafr_$(unique_string)",
+				"templates": [
+					{
+						"id": "$(custom_change_TempId)"
+					}
+				],
+				"criteria": [
+					{
+						"field": "title",
+						"condition": "is",
+						"values": [
+							"$(custom_changeTitle)"
+						],
+						"logical_operator": "AND"
+					},
+					{
+						"field": "category",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_categoriesId)",
+								"name": "$(custom_categoryName)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"actions": [
+					{
+						"mandate_fields": [
+							"downtimes_data"
+						]
+					}
+				]
+			}
+		}
+	},
+	"change_fafr_actions_nonmandate": {
+		"data": {
+			"change_fafr": {
+				"applies_to_all_templates": false,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "category",
+				"name": "fafr_$(unique_string)",
+				"templates": [
+					{
+						"id": "$(custom_change_TempId)"
+					}
+				],
+				"criteria": [
+					{
+						"field": "title",
+						"condition": "is",
+						"values": [
+							"$(custom_changeTitle)"
+						],
+						"logical_operator": "AND"
+					},
+					{
+						"field": "category",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_categoriesId)",
+								"name": "$(custom_categoryName)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"actions": [
+					{
+						"non_mandate_fields": [
+							"downtimes_data"
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_change": {
+		"data": {
+			"change_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_form_load",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, change_templates, change_templates, get_template_id)",
+								"name": "General Template"
+							}
+						],
+						"logical_operator": "AND"
+					},
+					{
+						"field": "workflow",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, workflows, workflows, get_workflow_id)",
+								"name": "General Change Workflow"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_problem": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_form_load",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, problem_templates, problem_templates, get_template_id)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"get_template_id": {
+		"data": {
+			"search_criteria": {
+				"condition": "is",
+				"field": "name",
+				"value": "$(custom_tempName)"
+			}
+		}
+	},
+	"get_workflow_id": {
+		"data": {
+			"search_criteria": {
+				"condition": "is",
+				"field": "name",
+				"value": "General Change Workflow"
+			}
+		}
+	},
+	"fafr_data_with_fieldchange_for_change": {
+		"data": {
+			"change_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "urgency",
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, change_templates, change_templates, get_template_id)",
+								"name": "General Template"
+							}
+						],
+						"logical_operator": "AND"
+					},
+					{
+						"field": "workflow",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, workflows, workflows, get_workflow_id)",
+								"name": "General Change Workflow"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_fieldchange_for_problem": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "urgency",
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, problem_templates, problem_templates, get_template_id)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formsubmit_for_problem": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_form_submit",
+				"is_enabled": true,
+				"on_field_change": "null",
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, problem_templates, problem_templates, get_template_id)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formsubmit_for_change": {
+		"data": {
+			"change_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_form_submit",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, change_templates, change_templates, get_template_id)",
+								"name": "General Template"
+							}
+						],
+						"logical_operator": "AND"
+					},
+					{
+						"field": "workflow",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, workflows, workflows, get_workflow_id)",
+								"name": "General Change Workflow"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formload_for_incident_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_templateId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_form_load",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formload_for_service_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_form_load",
+				"applies_to": "all_users",
+				"module": {
+					"name": "service"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_fieldChange_for_incident_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_templateId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_field_change",
+				"on_field_change": "urgency",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_fieldChange_for_service_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_field_change",
+				"on_field_change": "urgency",
+				"applies_to": "all_users",
+				"module": {
+					"name": "service"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formsubmit_for_incident_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_templateId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_form_submit",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formsubmit_for_service_request": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_form_submit",
+				"applies_to": "all_users",
+				"module": {
+					"name": "service"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": true,
+				"is_enabled": true,
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_problem_without_criteria": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_form_load",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": null,
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_fieldchange_for_problem_without_criteria": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "urgency",
+				"criteria": null,
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_with_formsubmit_for_problem_without_criteria": {
+		"data": {
+			"problem_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "technicians",
+				"event": "on_form_submit",
+				"is_enabled": true,
+				"on_field_change": "null",
+				"criteria": null,
+				"name": "fafr_ $(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_release_in_form_load": {
+		"data": {
+			"release_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_form_load",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				],
+				"templates": [
+				]
+			}
+		}
+	},
+	"fafr_data_for_release_in_field_change": {
+		"data": {
+			"release_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_field_change",
+				"is_enabled": true,
+				"on_field_change": "urgency",
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_release_in_form_submit": {
+		"data": {
+			"release_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_form_submit",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(custom_tempId)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"templates": [
+				],
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_for_ui_for_change": {
+		"data": {
+			"module_name": "Change",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Title",
+					"condition": "is",
+					"value": [
+						"New Change"
+					]
+				}
+			],
+			"execute_action": "Execute Custom Script",
+			"is_new_script": true,
+			"action_data": {
+				"cs_name": "cs $(unique_string)",
+				"cs_desc": "this is the cs for ui automation",
+				"cs_code": "await CS.alert(<message>);\nCS.end();"
+			},
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_ui_for_request": {
+		"data": {
+			"module_name": "Incident",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "On Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Subject",
+					"condition": "is",
+					"value": [
+						"Incident_Request"
+					]
+				}
+			],
+			"execute_action": "Execute Custom Script",
+			"is_new_script": true,
+			"action_data": {
+				"cs_name": "cs $(unique_string)",
+				"cs_desc": "this is the cs for ui automation",
+				"cs_code": "await CS.alert(<message>);\nCS.end();"
+			},
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_ui_for_service_request": {
+		"data": {
+			"module_name": "Service Request",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "On Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Subject",
+					"condition": "is",
+					"value": [
+						"Incident_Request"
+					]
+				}
+			],
+			"execute_action": "Execute Custom Script",
+			"is_new_script": true,
+			"action_data": {
+				"cs_name": "cs $(unique_string)",
+				"cs_desc": "this is the cs for ui automation",
+				"cs_code": "await CS.alert(<message>);\nCS.end();"
+			},
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_ui_for_release": {
+		"data": {
+			"module_name": "Release",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Title",
+					"condition": "is",
+					"value": [
+						"New Release"
+					]
+				}
+			],
+			"execute_action": "Execute Custom Script",
+			"is_new_script": true,
+			"action_data": {
+				"cs_name": "cs $(unique_string)",
+				"cs_desc": "this is the cs for ui automation",
+				"cs_code": "await CS.alert(<message>);\nCS.end();"
+			},
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_ui_for_problem": {
+		"data": {
+			"module_name": "Problem",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Title",
+					"condition": "is",
+					"value": [
+						"New Problem"
+					]
+				}
+			],
+			"execute_action": "Execute Custom Script",
+			"is_new_script": true,
+			"action_data": {
+				"cs_name": "cs $(unique_string)",
+				"cs_desc": "this is the cs for ui automation",
+				"cs_code": "await CS.alert(<message>);\nCS.end();"
+			},
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_ui_with_all_actions": {
+		"data": {
+			"module_name": "$(custom_moduleName)",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"template": "$(custom_templateName)",
+			"in_event_of": "$(custom_event)",
+			"is_criteria_needed": true,
+			"field": "Item",
+			"criteria": [
+				{
+					"name": "Impact",
+					"condition": "is",
+					"value": [
+						"Affects Department"
+					]
+				}
+			],
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Hide Fields",
+					"field": [
+						"Impact"
+					]
+				},
+				{
+					"actions": "Show Fields",
+					"field": [
+						"Category"
+					]
+				},
+				{
+					"actions": "Enable Fields",
+					"field": [
+						"Sub Category"
+					]
+				},
+				{
+					"actions": "Disable Fields",
+					"field": [
+						"Site"
+					]
+				},
+				{
+					"actions": "Mandate Fields",
+					"field": [
+						"Item"
+					]
+				},
+				{
+					"actions": "Non-Mandate Fields",
+					"field": [
+						"Group"
+					]
+				},
+				{
+					"actions": "Clear Options",
+					"field": [
+						"Urgency"
+					]
+				},
+				{
+					"actions": "Add Options",
+					"field": [
+						"Group",
+						[
+							"Hardware Problems \u00ab Base Site"
+						]
+					]
+				},
+				{
+					"actions": "Remove Options",
+					"field": [
+						"Impact",
+						[
+							"Affects Business"
+						]
+					]
+				},
+				{
+					"actions": "Set Value to Field",
+					"field": [
+						"Priority",
+						[
+							"High"
+						]
+					]
+				},
+				{
+					"actions": "Clear Field Value",
+					"field": [
+						"Category"
+					]
+				}
+			],
+			"is_enable": false
+		}
+	},
+	"fafr_data_for_release": {
+		"data": {
+			"release_fafr": {
+				"applies_to_all_templates": true,
+				"execute_on": "both",
+				"applies_to": "all_users",
+				"event": "on_form_load",
+				"is_enabled": true,
+				"on_field_change": null,
+				"criteria": [
+					{
+						"field": "template",
+						"condition": "is",
+						"values": [
+							{
+								"id": "$(rest_api, get, change_templates, change_templates, get_template_id)",
+								"name": "General Template"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"actions": [
+					{
+						"execute_scripts": [
+							{
+								"id": "$(custom_csId)"
+							}
+						]
+					}
+				],
+				"templates": [
+				]
+			}
+		}
+	},
+	"fafr_data_for_ui_for_problem_edit": {
+		"data": {
+			"module_name": "Problem",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "Form Load",
+			"is_criteria_needed": false,
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Hide Fields",
+					"field": [
+						"Impact"
+					]
+				}
+			],
+			"is_enable": true
+		}
+	},
+	"fafr_data_for_ui_for_request_edit": {
+		"data": {
+			"module_name": "Problem",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"in_event_of": "On Form Load",
+			"is_criteria_needed": false,
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Hide Fields",
+					"field": [
+						"Impact"
+					]
+				}
+			],
+			"is_enable": false
+		}
+	},
+	"service_fafr_actions_unset_task": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "subject",
+						"condition": "is",
+						"values": [
+							"FAFR_$(unique_string)"
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_tempId)"
+					}
+				],
+				"name": "FAFR_withUnSetTask_$(unique_string)",
+				"description": "fafr_description",
+				"event": "on_form_load",
+				"applies_to": "requesters",
+				"module": {
+					"name": "service"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"unset_tasks": [
+							{
+								"id": "$(custom_taskId)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"update_task": {
+		"data": {
+			"task": {
+				"template": {
+					"id": "$(custom_criteriaValue)"
+				},
+				"title": "TaskTitle_$(unique_string)",
+				"status": {
+					"name": "Open"
+				}
+			}
+		}
+	},
+	"fafr_data_for_form_load_ui_with_udf": {
+		"data": {
+			"module_name": "$(custom_moduleName)",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"template": "$(custom_templateName)",
+			"in_event_of": "Form Load",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Status",
+					"condition": "is",
+					"value": [
+						"$(custom_statusName)"
+					]
+				}
+			],
+			"is_enable": "true",
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Hide Fields",
+					"field": [
+						"$(custom_UDF_Name)"
+					]
+				},
+				{
+					"actions": "Set Value to Field",
+					"field": [
+						"$(custom_multiLookupUDFName0)",
+						[
+							"$(custom_siteName)"
+						]
+					]
+				}
+			]
+		}
+	},
+	"fafr_data_for_form_submit_ui_with_udf": {
+		"data": {
+			"module_name": "$(custom_moduleName)",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"template": "$(custom_templateName)",
+			"in_event_of": "Form Submit",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Additional Fields.$(custom_multiLookupUDFName0)",
+					"condition": "is",
+					"value": [
+						"$(custom_statusName)"
+					],
+					"logicalOperator": "AND"
+				}
+			],
+			"is_enable": "true",
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Clear Field Value",
+					"field": [
+						"$(custom_UDF_Name)"
+					]
+				},
+				{
+					"actions": "Set Value to Field",
+					"field": [
+						"$(custom_multiLookupUDFName0)",
+						[
+							"Base Site"
+						]
+					]
+				}
+			]
+		}
+	},
+	"fafr_data_for_field_change_ui_with_udf": {
+		"data": {
+			"module_name": "$(custom_moduleName)",
+			"name": "fafr_$(unique_string)",
+			"description": "fafr description $(unique_string)",
+			"template": "$(custom_templateName)",
+			"in_event_of": "Field Change",
+			"field": "$(custom_multiLookupUDFName1)",
+			"is_criteria_needed": true,
+			"criteria": [
+				{
+					"name": "Additional Fields.$(custom_UDF_Name)",
+					"condition": "is empty",
+					"value": [
+					],
+					"logicalOperator": "AND"
+				}
+			],
+			"is_enable": "true",
+			"execute_action": "Other actions",
+			"actions": [
+				{
+					"actions": "Set Value to Field",
+					"field": [
+						"$(custom_multiLookupUDFName0)",
+						[
+							"$(custom_siteName)"
+						]
+					]
+				}
+			]
+		}
+	},
+	"fafr_data_ApprovalStatus_is_Rejected": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"id": "$(custom_criteriaValue)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_serTempId)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "on_form_load",
+				"applies_to": "all_users",
+				"module": {
+					"name": "service"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "subject",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_show_fields_service_category": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+				],
+				"templates": [
+					{
+						"id": "$(custom_tempId)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+					}
+				]
+			}
+		}
+	},
+	"fafr_data_actions_fields_and_values": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+				],
+				"templates": [
+					{
+						"id": "$(custom_tempId)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+				]
+			}
+		}
+	},
+	"fafr_data_actions_fields_OnFieldChange": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+				],
+				"templates": [
+					{
+						"id": "$(custom_tempId)"
+					}
+				],
+				"on_field_change": "$(custom_onFieldChangeOf)",
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+				]
+			}
+		}
+	},
+	"fafr_data_actions_fields_OnFormSubmit": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+				],
+				"templates": [
+					{
+						"id": "$(custom_tempId)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "incident"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+				]
+			}
+		}
+	},
+	"fafr_condition_with_value": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"id": "$(custom_criteriaValue)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_without_value": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_with_value_ofc": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"id": "$(custom_criteriaValue)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"on_field_change": "$(custom_onFieldChangeOf)",
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_without_value_ofc": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"on_field_change": "$(custom_onFieldChangeOf)",
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_between": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"id": "$(custom_criteriaValue)"
+							},
+							{
+								"id": "$(custom_criteriaValue2)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_date_condition_today": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(datetime, 0Y 0M 0D 0h 0m, true)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_date_condition_next_year": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(datetime, 1Y 0M 7D 0h 0m, true)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_date_condition_prev_year": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(datetime, 1Y 0M 7D 0h 0m, false)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_date_condition_next_month": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(datetime, 0Y 1M 7D 0h 0m, true)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_date_condition_prev_month": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(datetime, 0Y 1M 7D 0h 0m, false)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_with_text_value": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(custom_criteriaValue)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	},
+	"fafr_condition_with_text_value_ofc": {
+		"data": {
+			"request_fafr": {
+				"criteria": [
+					{
+						"field": "$(custom_criteriaField)",
+						"condition": "$(custom_criteriaCondition)",
+						"values": [
+							{
+								"value": "$(custom_criteriaValue)"
+							}
+						],
+						"logical_operator": "AND"
+					}
+				],
+				"templates": [
+					{
+						"id": "$(custom_template_id)"
+					}
+				],
+				"on_field_change": "$(custom_onFieldChangeOf)",
+				"name": "fafr_$(unique_string)",
+				"description": "",
+				"event": "$(custom_executeWhen)",
+				"applies_to": "all_users",
+				"module": {
+					"name": "$(custom_moduleName)"
+				},
+				"execute_on": "both",
+				"applies_to_all_templates": false,
+				"is_enabled": true,
+				"actions": [
+					{
+						"set_value": [
+							{
+								"field": "$(custom_actionField)",
+								"value": "$(custom_actionValue)"
+							}
+						]
+					}
+				]
+			}
+		}
+	}
+}
