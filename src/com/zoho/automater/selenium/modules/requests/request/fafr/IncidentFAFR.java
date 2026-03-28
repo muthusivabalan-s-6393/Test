@@ -21,9 +21,11 @@ import com.zoho.automater.selenium.base.exceptions.BadResponseException;
 import com.zoho.automater.selenium.base.exceptions.DataNotFoundException;
 import com.zoho.automater.selenium.base.exceptions.FileNotFoundException;
 import com.zoho.automater.selenium.base.exceptions.SeleniumException;
+import com.zoho.automater.selenium.base.utils.WaitUtil;
 import com.zoho.automater.selenium.modules.GlobalConstants;
 import com.zoho.automater.selenium.modules.ModuleConstants;
 import com.zoho.automater.selenium.modules.OwnerConstants;
+import com.zoho.automater.selenium.modules.admin.automation.workflows.common.WorkflowsLocators;
 import com.zoho.automater.selenium.modules.admin.common.AdminConstants;
 import com.zoho.automater.selenium.modules.admin.common.AdminLocators;
 import com.zoho.automater.selenium.modules.admin.templatesandforms.formrules.common.FormRulesConstants;
@@ -36,6 +38,8 @@ import com.zoho.automater.selenium.modules.requests.request.common.RequestConsta
 import com.zoho.automater.selenium.modules.requests.request.common.RequestDataConstants;
 import com.zoho.automater.selenium.modules.requests.request.common.RequestFields;
 import com.zoho.automater.selenium.modules.requests.request.common.RequestLocators;
+import com.zoho.automater.selenium.modules.requests.requestapprovals.common.RequestApprovalsAPIUtils;
+import com.zoho.automater.selenium.modules.requests.requestapprovals.common.RequestApprovalsLocators;
 
 @AutomaterSuite(
 	role = RequestsRole.SDADMIN,
@@ -695,7 +699,10 @@ public class IncidentFAFR extends RequestFAFR {
 		template.getJSONObject(RequestFields.REQUEST_TEMPLATE.getDataPath()).remove(RequestFields.SERVICE_CATEGORY.getDataPath());
 		template.getJSONObject(RequestFields.REQUEST_TEMPLATE.getDataPath()).remove(RequestFields.IS_SERVICE_TEMPLATE.getDataPath());
 		template.getJSONObject(RequestFields.REQUEST_TEMPLATE.getDataPath()).remove(RequestFields.COST_DETAILS.getDataPath());
-		return restAPI.createAndGetResponse(RequestsEntities.REQUEST_TEMPLATE, RequestAPIPaths.REQUEST_TEMPLATES, template);
+		JSONObject json = restAPI.createAndGetResponse(RequestsEntities.REQUEST_TEMPLATE, RequestAPIPaths.REQUEST_TEMPLATES, template);
+		String reqid = json.getString("id");
+		LocalStorage.store("template_id", reqid);
+		return json;
 	}
 	
 	@Override
@@ -841,15 +848,16 @@ public class IncidentFAFR extends RequestFAFR {
 	
 	@Override
 	public void rejectTheRequest(String requestId) throws Exception {
+		// Submit for approval via API and then reject via UI
+		RequestApprovalsAPIUtils.submitForApprovalAPIWithUser(LocalStorage.getAsString("request_id"), "Submit_For_Approval_API", actions.getLoggedInUserMailId());
 		openRequestUsingShortCut(requestId);
 		requestDetailActions.toApprovalTab();
-		actions.click(RequestLocators.RequestFAFR.SUBMIT_FOR_APPROVAL);
-		actions.type(RequestLocators.RequestFAFR.SELECT_APPROVAR_IN_INCIDENT, actions.getLoggedInUserMailId());
-		actions.waitForAjaxComplete();
-		actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
 		actions.click(RequestLocators.RequestFAFR.STAGE1_LABEL);
-		actions.click(RequestLocators.RequestFAFR.REJECT_REQUEST);
-		actions.click(RequestLocators.Global.SAVE_BUTTON);
+		actions.click(RequestLocators.DetailView.CLICK_TAKE_ACTION_IN_APPROVALS_STAGE);
+		actions.click(RequestApprovalsLocators.Popup.APPROVAL_ACTION_REJECT);
+		actions.admin.popupFormBuilder.fillTextAreaField("approval_action_comment", "Reject");
+		actions.click(WorkflowsLocators.Listview.APPROVAL_COMMENT_SUBMIT);
+		WaitUtil.sleep(2l);
 	}
 	
 	// @AutomaterScenario(
