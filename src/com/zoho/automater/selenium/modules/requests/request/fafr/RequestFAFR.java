@@ -1098,13 +1098,30 @@ public class RequestFAFR extends RequestBase {
 			}else if(group.equals("createDualActionFAFR_OFL")) {
 				// dataIds[0]=firstAction (e.g. hide_fields), [1]=secondAction (e.g. show_fields), [2]=targetField
 				String templateName = random.generateRandomString(4);
-				addTemplate(templateName);
+				String actionFieldName = dataIds[2];
+				if(dataIds[2].equals("udf")) {
+					JSONObject udfResponse = createMultiLineUdf();
+					String fieldKey = udfResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
+					addTemplateWithNewField(fieldKey, templateName);
+					actionFieldName = "udf_fields." + fieldKey;
+					LocalStorage.store("additional_field_response", udfResponse.toString());
+				}else if(dataIds[2].equals("email_udf")) {
+					JSONObject udfResponse = createEmailUdf();
+					String fieldKey = udfResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
+					addTemplateWithNewField(fieldKey, templateName);
+					actionFieldName = "udf_fields." + fieldKey;
+					LocalStorage.store("additional_field_response", udfResponse.toString());
+				}else if(dataIds[2].contains("to_notify")) {
+					addTemplateWithEmailsToNotify(templateName);
+				}else {
+					addTemplate(templateName);
+				}
 				LocalStorage.store("moduleName", getFafrModuleName());
 				
 				// Rule 1: firstAction (e.g., hide_fields)
 				JSONObject rule1Data = DataUtil.getTestCaseDataUsingFilePath(path, "fafr_action_ofl");
 				JSONArray rule1Actions = rule1Data.getJSONObject("request_fafr").getJSONArray("actions");
-				rule1Actions.put(FAFRAPIUtil.buildOptionAction(dataIds[0], dataIds[2], "", ""));
+				rule1Actions.put(FAFRAPIUtil.buildOptionAction(dataIds[0], actionFieldName, "", ""));
 				FAFRAPIUtil.createRequestFAFR2(rule1Data);
 				String rule1Id = LocalStorage.getAsString("fafrId");
 				LocalStorage.store("fafrId1", rule1Id);
@@ -1112,7 +1129,7 @@ public class RequestFAFR extends RequestBase {
 				// Rule 2: secondAction (e.g., show_fields)
 				JSONObject rule2Data = DataUtil.getTestCaseDataUsingFilePath(path, "fafr_action_ofl");
 				JSONArray rule2Actions = rule2Data.getJSONObject("request_fafr").getJSONArray("actions");
-				rule2Actions.put(FAFRAPIUtil.buildOptionAction(dataIds[1], dataIds[2], "", ""));
+				rule2Actions.put(FAFRAPIUtil.buildOptionAction(dataIds[1], actionFieldName, "", ""));
 				FAFRAPIUtil.createRequestFAFR2(rule2Data);
 				
 				// For edit-form-only fields, create a request so the test can open edit form
@@ -1120,37 +1137,51 @@ public class RequestFAFR extends RequestBase {
 					createRequestFromLocalStorage();
 				}
 			}else if(group.equals("createUdfActionFAFR_OFL")) {
-				// dataIds[0]=udfType (email/multiline/picklist/multiselect), [1]=actionType (hide_fields/disable_fields/mandate_fields/clear_options)
+				// dataIds[0]=udfType (email/multiline/picklist/multiselect), [1]=actionType (hide_fields/disable_fields/mandate_fields/clear_options/add_options/remove_options/set_value/clear_field_value)
+				// dataIds[2]=optionIndex (1/2/3 or empty for field-only actions)
 				// Creates UDF field, template with UDF, and FAFR rule via API
 				// Stores: udf_field_id, udf_field_name, udf_field_key, service_category_id, template_name, template_id, fafrId, moduleName,
-				// actionType, udfApiFieldName, optionId, optionValue
+				// actionType, udfApiFieldName, optionId, optionValue, udf_option_1/2/3, additional_field_response
+				String option1 = random.generateRandomString(3);
+				String option2 = random.generateRandomString(3);
+				String option3 = random.generateRandomString(3);
 				JSONObject additionalFieldResponse;
 				if(dataIds[0].equals("email")) {
 					additionalFieldResponse = createEmailUdf();
 				}else if(dataIds[0].equals("multiline")) {
 					additionalFieldResponse = createMultiLineUdf();
 				}else if(dataIds[0].equals("picklist")) {
-					String option1 = random.generateRandomString(3);
-					String option2 = random.generateRandomString(3);
-					String option3 = random.generateRandomString(3);
 					additionalFieldResponse = createPickListUdfWithThreeOptions(option1, option2, option3);
 				}else if(dataIds[0].equals("multiselect")) {
-					String option1 = random.generateRandomString(3);
-					String option2 = random.generateRandomString(3);
-					String option3 = random.generateRandomString(3);
 					additionalFieldResponse = createMultiSelectUdfWithThreeOptions(option1, option2, option3);
 				}else {
 					throw new Exception("Unknown UDF type: " + dataIds[0]);
 				}
 				String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
+				LocalStorage.store("additional_field_response", additionalFieldResponse.toString());
 				String templateName = random.generateRandomString(4);
 				addTemplateWithNewField(fieldKey, templateName);
 				LocalStorage.store("moduleName", getFafrModuleName());
+				LocalStorage.store("udf_option_1", option1);
+				LocalStorage.store("udf_option_2", option2);
+				LocalStorage.store("udf_option_3", option3);
+				// Resolve option value from optionIndex
+				String optionIndex = (dataIds.length > 2) ? dataIds[2] : "";
+				String optionValue = "";
+				if(!optionIndex.isEmpty()) {
+					optionValue = optionIndex.equals("1") ? option1 : optionIndex.equals("2") ? option2 : option3;
+				}
+				String udfApiFieldName = "udf_fields." + fieldKey;
 				LocalStorage.store("actionType", dataIds[1]);
-				LocalStorage.store("udfApiFieldName", "udf_fields." + fieldKey);
-				LocalStorage.store("optionId", "");
-				LocalStorage.store("optionValue", "");
-				FAFRAPIUtil.createRequestFAFR2(getTestCaseData(RequestDataConstants.FafrData.UDF_ACTION_FAFR_OFL));
+				LocalStorage.store("udfApiFieldName", udfApiFieldName);
+				LocalStorage.store("optionId", optionValue);
+				LocalStorage.store("optionValue", optionValue);
+				JSONObject udfFafrData = getTestCaseData(RequestDataConstants.FafrData.UDF_ACTION_FAFR_OFL);
+				// Replace template's action with buildOptionAction's correct format for ALL action types
+				JSONArray actionsArray = new JSONArray();
+				actionsArray.put(FAFRAPIUtil.buildOptionAction(dataIds[1], udfApiFieldName, optionValue, optionValue));
+				udfFafrData.getJSONObject("request_fafr").put("actions", actionsArray);
+				FAFRAPIUtil.createRequestFAFR2(udfFafrData);
 			}else if(group.equals("createUdfActionFAFR_OFC")) {
 				// dataIds[0]=udfType (picklist/multiselect), [1]=actionType
 				// (remove_options/add_options/clear_options/set_value/clear_field_value/etc.)
@@ -1728,9 +1759,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "category"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -1738,43 +1769,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.CATEGORY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -1810,9 +1805,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "email_ids_to_notify"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -1820,43 +1815,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowEmailsToNotifyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplateWithEmailsToNotify(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, AdditionalFieldsFields.EMAIL_IDS_TO_NOTIFY.getDataPath()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -1868,9 +1827,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "group"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -1878,43 +1837,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowGroupFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.GROUP.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -1926,9 +1849,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "impact"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -1936,43 +1859,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowImpactFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.IMPACT.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -1984,9 +1871,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "impact_details"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -1994,45 +1881,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowImpactDetailsFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			String impact = RequestFields.IMPACT_DETAILS.getName();
-			boolean test = actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.TEXTAREA, RequestFields.IMPACT_DETAILS.getName()));
-			openRequestAddForm(template);
-			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.TEXTAREA, RequestFields.IMPACT_DETAILS.getName()))) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.IMPACT_DETAILS.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -2043,9 +1893,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "item"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2053,43 +1903,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowItemFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.ITEM.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2101,9 +1915,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "level"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2111,43 +1925,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowLevelFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.LEVEL.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2159,9 +1937,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "mode"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2169,43 +1947,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowModeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.MODE.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2217,9 +1959,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "priority"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2227,43 +1969,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowPriorityFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.PRIORITY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2275,9 +1981,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "request_type"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2285,43 +1991,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.REQUEST_TYPE.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2357,9 +2027,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "subcategory"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2367,43 +2037,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.SUBCATEGORY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2415,9 +2049,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "technician"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2425,43 +2059,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowTechnicianFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.TECHNICIAN.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2497,9 +2095,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "urgency"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2507,43 +2105,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowUrgencyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestFields.URGENCY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2555,9 +2117,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "email_udf"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2565,47 +2127,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowEmailUdfActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createEmailUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)))) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key"))))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -2616,9 +2139,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"hide_fields", "show_fields", "udf"},
 		tags = {},
 		description = "Test Show Fields Action execute on form load",
 		
@@ -2626,47 +2149,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkShowUdfActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createMultiLineUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.HIDE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SHOW_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.TEXTAREA, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)))) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.isElementPresent(RequestLocators.RequestFAFR.SELECT_SHOWN_FIELD.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key"))))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -2677,9 +2161,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "category"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -2687,43 +2171,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.CATEGORY.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2759,9 +2207,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "email_ids_to_notify"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -2769,43 +2217,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableEmailsToNotifyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplateWithEmailsToNotify(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, AdditionalFieldsFields.EMAIL_IDS_TO_NOTIFY.getDataPath())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2817,9 +2229,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "group"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -2827,43 +2239,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableGroupFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.GROUP.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2875,9 +2251,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "impact"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -2885,44 +2261,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableImpactFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.IMPACT.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -2934,9 +2273,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "impact_details"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -2944,44 +2283,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableImpactDetailsFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.TEXTAREA, RequestFields.IMPACT_DETAILS.getName())).isEnabled()) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.IMPACT_DETAILS.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -2992,9 +2295,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "item"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3002,43 +2305,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableItemFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.ITEM.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3050,9 +2317,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "level"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3060,43 +2327,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableLevelFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.LEVEL.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3108,9 +2339,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "mode"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3118,43 +2349,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableModeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.MODE.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3166,9 +2361,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "priority"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3176,43 +2371,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnablePriorityFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.PRIORITY.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3224,9 +2383,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "request_type"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3234,43 +2393,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.REQUEST_TYPE.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3306,9 +2429,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "subcategory"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3316,43 +2439,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.SUBCATEGORY.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3364,9 +2451,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "technician"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3374,43 +2461,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableTechnicianFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.TECHNICIAN.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3446,9 +2497,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "urgency"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3456,43 +2507,7 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableUrgencyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
+			openRequestAddFormFromLocalStorage();
 			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestFields.URGENCY.getName())).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
@@ -3504,9 +2519,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "email_udf"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3514,47 +2529,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableEmailUdfActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createEmailUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).isEnabled()) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key")))).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -3565,9 +2541,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"disable_fields", "enable_fields", "udf"},
 		tags = {},
 		description = "Test Enable Fields Action execute on form load",
 		
@@ -3575,47 +2551,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkEnableUdfActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createMultiLineUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.DISABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ENABLE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.TEXTAREA, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).isEnabled()) {
+			openRequestAddFormFromLocalStorage();
+			if(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key")))).isEnabled()) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -4454,66 +3391,24 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "category"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0414"
 	)
-	public void checkNonMandateCategoryFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isElementPresent(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply("category", RequestConstants.ErrorLabelText.CATEGORY_VALIDATION_ERROR))) {
-				addSuccessReport("Validation msg not displayed successfully");
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.CATEGORY.getName()))) {
+				addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Validation msg displayed", "Message not verified");
+				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
@@ -4542,581 +3437,200 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "email_ids_to_notify"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0417"
 	)
-	public void checkNonMandateEmailsToNotifyFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateEmailsToNotifyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplateWithEmailsToNotify(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply("email_ids_to_notify", RequestConstants.ErrorLabelText.EMAIL_ID_TO_NOTIFY_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(AdditionalFieldsFields.EMAIL_IDS_TO_NOTIFY.getDataPath()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "group"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0418"
 	)
-	public void checkNonMandateGroupFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateGroupFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.GROUP.getName(), RequestConstants.ErrorLabelText.GROUP_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.GROUP.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "impact"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0419"
 	)
-	public void checkNonMandateImpactFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateImpactFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.IMPACT_DETAILS.getName(), RequestConstants.ErrorLabelText.IMPACT_DETAILS_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.IMPACT.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "impact_details"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0420"
 	)
-	public void checkNonMandateImpactDetailsFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateImpactDetailsFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT_DETAILS);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.IMPACT_DETAILS.getName(), RequestConstants.ErrorLabelText.IMPACT_DETAILS_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.IMPACT_DETAILS.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "item"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0421"
 	)
-	public void checkNonMandateItemFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateItemFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isElementPresent(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply("item", RequestConstants.ErrorLabelText.ITEM_VALIDATION_ERROR))) {
-				addSuccessReport("Validation msg not displayed successfully");
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.ITEM.getName()))) {
+				addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Validation msg displayed", "Message not verified");
+				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			// restAPI.delete("request_templates/" + LocalStorage.getAsString("template_id"));
-			// restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "level"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0422"
 	)
-	public void checkNonMandateLevelFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateLevelFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isElementPresent(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply("level", RequestConstants.ErrorLabelText.LEVEL_VALIDATION_ERROR))) {
-				addSuccessReport("Validation msg not displayed successfully");
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.LEVEL.getName()))) {
+				addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Validation msg displayed", "Message not verified");
+				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "mode"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0423"
 	)
-	public void checkNonMandateModeFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandateModeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.MODE.getName(), RequestConstants.ErrorLabelText.MODE_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.MODE.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "priority"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0424"
 	)
-	public void checkNonMandatePriorityFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		
+	public void checkNonMandatePriorityFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.PRIORITY.getName(), RequestConstants.ErrorLabelText.PRIORITY_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.PRIORITY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "request_type"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0425"
 	)
-	public void checkNonMandateRequestTypeFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		String rulename1 = random.generateRandomString(4);
-		
+	public void checkNonMandateRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename1);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.REQUEST_TYPE.getName(), RequestConstants.ErrorLabelText.REQUEST_TYPE_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.REQUEST_TYPE.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
-			deleteFafr(rulename1);
 		}
 	}
 	
@@ -5145,76 +3659,31 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "subcategory"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
 		
 		id = "SDPOD-FL-S-FAFR-0428"
 	)
-	public void checkNonMandateSubCategoryFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		String rulename1 = random.generateRandomString(4);
-		
+	public void checkNonMandateSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename1);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.SUBCATEGORY.getName(), RequestConstants.ErrorLabelText.SUB_CATEGORY_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.SUBCATEGORY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
-			deleteFafr(rulename1);
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "technician"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
 		
@@ -5222,45 +3691,8 @@ public class RequestFAFR extends RequestBase {
 	)
 	public void checkNonMandateTechnicianFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(RequestFields.TECHNICIAN.getName(), RequestConstants.ErrorLabelText.TECHNICIAN_VALIDATION_ERROR))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.TECHNICIAN.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
@@ -5295,216 +3727,68 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "urgency"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
+		
 		id = "SDPOD-FL-S-FAFR-0431"
 	)
-	public void checkNonMandateUrgencyFieldActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		String rulename1 = random.generateRandomString(4);
+	public void checkNonMandateUrgencyFieldActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename1);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isElementPresent(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply("urgency", RequestConstants.ErrorLabelText.URGENCY_VALIDATION_ERROR))) {
-				addSuccessReport("Validation msg not displayed successfully");
-			}else {
-				addFailureReport("Validation msg displayed", "Message not verified");
-			}
-		}catch(Exception exception) {
-			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
-			deleteFafr(rulename1);
-		}
-	}
-	
-	@AutomaterScenario(
-		group = "RequestFAFR",
-		priority = Priority.MEDIUM,
-		dataIds = {},
-		tags = {},
-		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
-		id = "SDPOD-FL-S-FAFR-0432"
-	)
-	public void checkNonMandateEmailUdfActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		String rulename1 = random.generateRandomString(4);
-		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createEmailUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			String internalName = "udf_fields-" + fieldKey;
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename1);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			if(!actions.isDisplayed(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(internalName, RequestConstants.DetailsPageGlobalActions.MANDATORY_ERROR.apply(additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()))))) {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestFields.URGENCY.getName()))) {
 				addSuccessReport("Rule was executed successfully");
 			}else {
 				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
-			// if(!actions.getText(RequestLocators.DetailView.MANDATORY_MESSAGE.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).equals(RequestConstants.DetailsPageGlobalActions.MANDATORY_ERROR.apply(additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()))))
-			// {
-			// addSuccessReport("Rule was executed successfully");
-			// }else {
-			// addFailureReport("Unable to execute the Rule", "Expected value not present");
-			// }
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
-			deleteFafr(rulename1);
 		}
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createDualActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"mandate_fields", "non_mandate_fields", "email_udf"},
 		tags = {},
 		description = "Test Non-Mandate Fields Action execute on form load",
-		runType = ScenarioRunType.USER_BASED,
-		id = "SDPOD-FL-S-FAFR-0433"
+		
+		id = "SDPOD-FL-S-FAFR-0432"
 	)
-	public void checkNonMandateUdfActionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String rulename = random.generateRandomString(4);
-		String rulename1 = random.generateRandomString(4);
+	public void checkNonMandateEmailUdfActionExecuteOnFormLoad() {
 		try {
-			String templateName = random.generateRandomString(4);
-			
-			JSONObject additionalFieldResponse = createMultiLineUdf();
-			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
-			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
-			
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			actions.refreshPage();
-			
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, rulename1);
-			
-			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.NON_MANDATE_FIELDS);
-			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
-			
-			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
-			openRequestAddForm(template);
-			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
-			String udfName = fieldKey.split("_")[1];
-			String fieldname2 = "udf_fields-" + fieldKey; // while verifying in form
-			if(!actions.isElementPresent(RequestLocators.ValidationMessage.VERIFY_VALIDATION_MESSAGE_BY_ERROR.apply(fieldname2, "Provide value for field " + udfName))) {
-				addSuccessReport("Validation msg not displayed successfully");
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key"))))) {
+				addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Validation msg displayed", "Message not verified");
+				addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
-			// if(!actions.getText(RequestLocators.DetailView.MANDATORY_MESSAGE.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).equals(RequestConstants.DetailsPageGlobalActions.MANDATORY_ERROR.apply(additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()))))
-			// {
-			// addSuccessReport("Rule was executed successfully");
-			// }else {
-			// addFailureReport("Unable to execute the Rule", "Expected value not present");
-			// }
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteFafr(rulename);
-			restAPI.delete("service_categories/" + LocalStorage.getAsString("service_category_id"));
-			deleteFafr(rulename1);
+		}
+	}
+	
+	@AutomaterScenario(
+		group = "createDualActionFAFR_OFL",
+		priority = Priority.MEDIUM,
+		dataIds = {"mandate_fields", "non_mandate_fields", "udf"},
+		tags = {},
+		description = "Test Non-Mandate Fields Action execute on form load",
+		
+		id = "SDPOD-FL-S-FAFR-0433"
+	)
+	public void checkNonMandateUdfActionExecuteOnFormLoad() {
+		try {
+			openRequestAddFormFromLocalStorage();
+			if(!actions.isElementPresent(RequestLocators.Form.CHECK_MANDATE_FIELD.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(LocalStorage.getAsString("udf_field_key"))))) {
+				addSuccessReport("Rule was executed successfully");
+			}else {
+				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			}
+		}catch(Exception exception) {
+			addFailureReport("Exception occured while running the case", exception.getMessage());
 		}
 	}
 	
@@ -5813,9 +4097,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "category", "categories", "Software"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -5848,9 +4132,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.CATEGORY.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.CATEGORY_SOFTWARE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -5862,9 +4146,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "group", "groups", "Network"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -5873,16 +4157,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToGroupFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -5892,14 +4172,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -5909,13 +4185,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.GROUP.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.GROUP_NETWORK)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -5923,9 +4198,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "impact", "impacts", "Affects Business"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -5934,16 +4209,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToImpactFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -5953,14 +4224,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -5970,13 +4237,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.IMPACT.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.IMPACT_AFFECTSBUSINESS)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -5984,9 +4250,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "item", "item", "Install « MS Office « Software"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -5995,16 +4261,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToItemFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6014,14 +4276,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6031,16 +4289,14 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.formBuilder.fillSelectField(RequestFields.CATEGORY.getName(), RequestConstants.FieldValues.CATEGORY_SOFTWARE);
 			actions.formBuilder.fillSelectField(RequestFields.SUBCATEGORY.getName(), RequestConstants.FieldValues.SUBCATEGORY_MSOFFICE);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.ITEM.getName()));
-			
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.ITEM_INSTALL)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6048,9 +4304,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "level", "levels", "Tier 1"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6059,16 +4315,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToLevelFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6078,14 +4330,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6095,13 +4343,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.LEVEL.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.LEVEL_TIER1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6109,9 +4356,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "mode", "modes", "E-Mail"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6120,16 +4367,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToModeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6139,14 +4382,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6156,13 +4395,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.MODE.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.MODE_EMAIL)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6170,9 +4408,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "priority", "priorities", "Low"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6181,16 +4419,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToPriorityFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6200,14 +4434,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6217,13 +4447,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.PRIORITY.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.PRIORITY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6231,9 +4460,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "request_type", "request_types", "Incident"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6242,16 +4471,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6261,14 +4486,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6278,13 +4499,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.REQUEST_TYPE.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.REQUESTTYPE_INCIDENT)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6292,9 +4512,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "subcategory", "subcategory", "MS Office « Software"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6303,16 +4523,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6322,14 +4538,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6339,14 +4551,13 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.formBuilder.fillSelectField(RequestFields.CATEGORY.getName(), RequestConstants.FieldValues.CATEGORY_SOFTWARE);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.SUBCATEGORY.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.SUBCATEGORY_MSOFFICE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6354,9 +4565,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "technician", "technician", "scenario_user"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6365,16 +4576,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToTechnicianFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6384,14 +4591,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6401,13 +4604,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.TECHNICIAN.getName()));
 			if(requestFormbuilder.isOptionPresent(scenarioDetails.getScenarioUser().getDisplayId())) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6415,9 +4617,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"add_options", "urgency", "urgencies", "Low"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6426,16 +4628,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToUrgencyFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6445,14 +4643,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6462,13 +4656,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.URGENCY.getName()));
 			if(requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.URGENCY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6476,9 +4669,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"multiselect", "add_options", "1"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6487,21 +4680,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToMultiSelectUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createMultiSelectUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6511,14 +4700,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6528,14 +4713,13 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)));
 			actions.type(ClientFrameworkLocators.FormBuilderLocators.TYPE_MULTISELECT_SEARCH_INPUT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)), option1);
 			if(actions.isElementPresent(ClientFrameworkLocators.FormBuilderLocators.OPTION_ELEMENT.apply(option1))) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6543,9 +4727,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"picklist", "add_options", "1"},
 		tags = {},
 		description = "Test Add Options Action execute on form load",
 		
@@ -6554,21 +4738,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkAddOptionsToPickListUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createPickListUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6578,14 +4758,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.ADD_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6595,13 +4771,12 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)));
 			if(requestFormbuilder.isOptionPresent(option1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6609,9 +4784,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "category", "requests/category", "Software"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6620,16 +4795,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromCategoryFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6642,9 +4813,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.CATEGORY.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.CATEGORY_SOFTWARE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6652,9 +4823,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "group", "groups", "Network"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6663,16 +4834,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromGroupFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6685,9 +4852,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.GROUP.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.GROUP_NETWORK)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6695,9 +4862,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "impact", "impacts", "Affects Business"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6706,16 +4873,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromImpactFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6728,9 +4891,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.IMPACT.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.IMPACT_AFFECTSBUSINESS)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6738,9 +4901,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "item", "item", "Install « MS Office « Software"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6749,16 +4912,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromItemFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6773,9 +4932,9 @@ public class RequestFAFR extends RequestBase {
 			actions.formBuilder.fillSelectField(RequestFields.SUBCATEGORY.getName(), RequestConstants.FieldValues.SUBCATEGORY_MSOFFICE);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.ITEM.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.ITEM_INSTALL)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6783,9 +4942,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "level", "levels", "Tier 1"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6794,16 +4953,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromLevelFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6816,9 +4971,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.LEVEL.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.LEVEL_TIER1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6826,9 +4981,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "mode", "modes", "E-Mail"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6837,16 +4992,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromModeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6859,9 +5010,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.MODE.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.MODE_EMAIL)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6869,9 +5020,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "priority", "priorities", "Low"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6880,16 +5031,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromPriorityFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6902,9 +5049,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.PRIORITY.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.PRIORITY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6912,9 +5059,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "request_type", "request_types", "Incident"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6923,16 +5070,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6945,9 +5088,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.REQUEST_TYPE.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.REQUESTTYPE_INCIDENT)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6955,9 +5098,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "subcategory", "subcategory", "MS Office « Software"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -6966,16 +5109,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -6989,9 +5128,9 @@ public class RequestFAFR extends RequestBase {
 			actions.formBuilder.fillSelectField(RequestFields.CATEGORY.getName(), RequestConstants.FieldValues.CATEGORY_SOFTWARE);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.SUBCATEGORY.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.SUBCATEGORY_MSOFFICE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -6999,9 +5138,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "technician", "technician", "scenario_user"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -7010,16 +5149,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromTechnicianFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7032,9 +5167,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.TECHNICIAN.getName()));
 			if(!requestFormbuilder.isOptionPresent(scenarioDetails.getScenarioUser().getDisplayId())) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7042,9 +5177,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"remove_options", "urgency", "urgencies", "Low"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -7053,16 +5188,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromUrgencyFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7075,9 +5206,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.URGENCY.getName()));
 			if(!requestFormbuilder.isOptionPresent(RequestConstants.FieldValues.URGENCY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7085,9 +5216,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"multiselect", "remove_options", "1"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -7096,21 +5227,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromMultiSelectUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createMultiSelectUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7124,9 +5251,9 @@ public class RequestFAFR extends RequestBase {
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)));
 			actions.type(ClientFrameworkLocators.FormBuilderLocators.TYPE_MULTISELECT_SEARCH_INPUT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)), option1);
 			if(!actions.isElementPresent(ClientFrameworkLocators.FormBuilderLocators.OPTION_ELEMENT.apply(option1))) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7134,9 +5261,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"picklist", "remove_options", "1"},
 		tags = {},
 		description = "Test Remove Options Action execute on form load",
 		
@@ -7145,21 +5272,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkRemoveOptionsFromPickListUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createPickListUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.REMOVE_OPTIONS);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7172,9 +5295,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestAddForm(template);
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey)));
 			if(!requestFormbuilder.isOptionPresent(option1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7182,9 +5305,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "category", "categories", "Software"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7193,16 +5316,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToCategoryFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7213,12 +5332,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.CATEGORY.getName())).equals(RequestConstants.FieldValues.CATEGORY_SOFTWARE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7226,9 +5344,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "created_time"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7237,16 +5355,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToCreatedDateFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7255,9 +5369,7 @@ public class RequestFAFR extends RequestBase {
 			actions.click(ClientFrameworkLocators.DatePickerLocators.NEXT_YEAR_LOCATOR);
 			actions.click(ClientFrameworkLocators.DatePickerLocators.DATE_LOCATOR.apply(7));
 			actions.click(ClientFrameworkLocators.DatePickerLocators.APPLY_DATE_LOCATOR);
-			
 			String time = RequestUtil.getAttributeForInputField(actions.getElement(AdminLocators.RequestFAFR.CALENDAR_CRITERIA_INPUT), RequestFields.VALUE.getDataPath());
-			
 			// actions.click(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_RADIO_BUTTON);
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
@@ -7266,9 +5378,9 @@ public class RequestFAFR extends RequestBase {
 			openRequestUsingShortCut(requestResponse.getString(RequestFields.DISPLAY_ID.getDataPath()));
 			actions.click(RequestLocators.Listview.EDIT_REQUEST_BUTTON);
 			if(RequestUtil.getAttributeForInputField(actions.getElement(ClientFrameworkLocators.DatePickerLocators.DATE_FIELD_LOCATOR.apply(RequestFields.CREATED_TIME.getName())), RequestFields.VALUE.getDataPath()).equals(time)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7276,9 +5388,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "email_ids_to_notify"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7287,15 +5399,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToEmailsToNotifyFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplateWithEmailsToNotify(templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7306,11 +5415,10 @@ public class RequestFAFR extends RequestBase {
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
 			openRequestAddForm(template);
-			
 			if(RequestUtil.getAttributeForInputField(actions.getElement(RequestLocators.Form.EMAIL_FIELD_INPUT.apply(AdditionalFieldsFields.EMAIL_IDS_TO_NOTIFY.getDataPath())), RequestFields.VALUE.getDataPath()).equals(scenarioDetails.getUser(ScenarioUsers.TEST_USER_3).getMailId() + ",")) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7318,9 +5426,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "group", "groups", "Network"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7329,16 +5437,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToGroupFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7349,12 +5453,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.GROUP.getName())).equals(RequestConstants.FieldValues.GROUP_NETWORK)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7362,9 +5465,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "impact", "impacts", "Affects Business"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7373,16 +5476,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToImpactFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7393,12 +5492,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.IMPACT.getName())).equals(RequestConstants.FieldValues.IMPACT_AFFECTSBUSINESS)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7406,9 +5504,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "item", "item", "Install « MS Office « Software"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7417,17 +5515,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToItemFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7438,14 +5531,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7456,14 +5545,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7474,12 +5559,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.ITEM.getName())).equals(RequestConstants.FieldValues.ITEM_INSTALL_MSOFFICE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7487,9 +5571,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "level", "levels", "Tier 1"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7498,16 +5582,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToLevelFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7518,12 +5598,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.LEVEL.getName())).equals(RequestConstants.FieldValues.LEVEL_TIER1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7531,9 +5610,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "mode", "modes", "E-Mail"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7542,16 +5621,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToModeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7562,12 +5637,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.MODE.getName())).equals(RequestConstants.FieldValues.MODE_EMAIL)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7575,9 +5649,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "priority", "priorities", "Low"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7586,16 +5660,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToPriorityFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7606,12 +5676,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.PRIORITY.getName())).equals(RequestConstants.FieldValues.PRIORITY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7619,9 +5688,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "request_type", "request_types", "Incident"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7630,16 +5699,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToRequestTypeFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7650,12 +5715,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.REQUEST_TYPE.getName())).equals(RequestConstants.FieldValues.REQUESTTYPE_INCIDENT)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7663,9 +5727,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "subcategory", "subcategory", "MS Office « Software"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7674,17 +5738,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToSubCategoryFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7695,14 +5754,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7713,12 +5768,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.SUBCATEGORY.getName())).equals(RequestConstants.FieldValues.SUBCATEGORY_MSOFFICE)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7726,9 +5780,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "technician", "technician", "scenario_user"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7737,16 +5791,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToTechnicianFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7757,12 +5807,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.TECHNICIAN.getName())).equals(scenarioDetails.getScenarioUser().getDisplayId())) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7770,9 +5819,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"set_value", "urgency", "urgencies", "Low"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7781,16 +5830,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToUrgencyFieldActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7801,12 +5846,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.URGENCY.getName())).equals(RequestConstants.FieldValues.URGENCY_LOW)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7814,9 +5858,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"multiselect", "set_value", "1"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7825,21 +5869,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToMultiSelectUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createMultiSelectUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7851,9 +5891,9 @@ public class RequestFAFR extends RequestBase {
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.VALIDATE_MULTISELECT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).equals(option1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7861,9 +5901,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"picklist", "set_value", "1"},
 		tags = {},
 		description = "Test Set Value to Field Action execute on form load",
 		
@@ -7872,21 +5912,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkSetValueToPickListUdfActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createPickListUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7899,9 +5935,9 @@ public class RequestFAFR extends RequestBase {
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).equals(option1)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7909,9 +5945,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "category"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -7920,16 +5956,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearCategoryFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7940,14 +5972,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.CATEGORY);
@@ -7955,12 +5983,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.CATEGORY.getName())).equals(RequestConstants.FieldValues.PlaceHolders.CATEGORY_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -7968,9 +5995,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "email_ids_to_notify"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -7979,15 +6006,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearEmailsToNotifyFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplateWithEmailsToNotify(templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -7997,14 +6021,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.EMAILS_TO_NOTIFY);
@@ -8012,12 +6032,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(RequestUtil.getAttributeForInputField(actions.getElement(RequestLocators.Form.EMAIL_FIELD_INPUT.apply(AdditionalFieldsFields.EMAIL_IDS_TO_NOTIFY.getName())), RequestFields.PLACEHOLDER.getDataPath()).equals(RequestConstants.FieldValues.PlaceHolders.EMAILS_TO_NOTIFY_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8025,9 +6044,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "group"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8036,16 +6055,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearGroupFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8056,14 +6071,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.GROUP);
@@ -8071,12 +6082,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.GROUP.getName())).equals(RequestConstants.FieldValues.PlaceHolders.GROUP_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8084,9 +6094,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "impact"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8095,16 +6105,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearImpactFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8116,12 +6122,9 @@ public class RequestFAFR extends RequestBase {
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.IMPACT);
@@ -8129,12 +6132,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.IMPACT.getName())).equals(RequestConstants.FieldValues.PlaceHolders.IMPACT_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8142,9 +6144,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "item"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8153,17 +6155,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearItemFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8174,14 +6171,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8192,14 +6185,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8210,14 +6199,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.ITEM);
@@ -8225,12 +6210,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.ITEM.getName())).equals(RequestConstants.FieldValues.PlaceHolders.ITEM_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8238,9 +6222,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "level"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8249,16 +6233,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearLevelFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8269,14 +6249,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.LEVEL);
@@ -8284,12 +6260,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.LEVEL.getName())).equals(RequestConstants.FieldValues.PlaceHolders.LEVEL_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8297,9 +6272,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "mode"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8308,16 +6283,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearModeFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8328,14 +6299,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.MODE);
@@ -8343,12 +6310,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.MODE.getName())).equals(RequestConstants.FieldValues.PlaceHolders.MODE_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8356,9 +6322,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "priority"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8367,16 +6333,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearPriorityFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8387,14 +6349,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.PRIORITY);
@@ -8402,12 +6360,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.PRIORITY.getName())).equals(RequestConstants.FieldValues.PlaceHolders.PRIORITY_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8415,9 +6372,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "request_type"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8426,16 +6383,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearRequestTypeFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8446,14 +6399,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.REQUEST_TYPE);
@@ -8461,12 +6410,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.REQUEST_TYPE.getName())).equals(RequestConstants.FieldValues.PlaceHolders.REQUEST_TYPE_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8474,9 +6422,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "subcategory"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8485,17 +6433,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearSubCategoryFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8506,14 +6449,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8524,14 +6463,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.SUB_CATEGORY);
@@ -8539,12 +6474,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.SUBCATEGORY.getName())).equals(RequestConstants.FieldValues.PlaceHolders.SUB_CATEGORY_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8552,9 +6486,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "technician"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8563,16 +6497,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearTechnicianFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8583,14 +6513,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.TECHNICIAN);
@@ -8598,12 +6524,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.TECHNICIAN.getName())).equals(RequestConstants.FieldValues.PlaceHolders.TECHNICIAN_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8611,9 +6536,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"clear_field_value", "urgency"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8622,16 +6547,12 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearUrgencyFieldValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			JSONObject template = addTemplate(templateName);
-			
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8642,14 +6563,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, AdminConstants.RequestFAFR.Fields.URGENCY);
@@ -8657,12 +6574,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestFields.URGENCY.getName())).equals(RequestConstants.FieldValues.PlaceHolders.URGENCY_FIELD)) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8670,9 +6586,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"multiselect", "clear_field_value"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8681,21 +6597,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearMultiSelectUdfValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createMultiSelectUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8706,12 +6618,9 @@ public class RequestFAFR extends RequestBase {
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
@@ -8719,12 +6628,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(RequestUtil.getAttributeForInputField(actions.getElement(ClientFrameworkLocators.FormBuilderLocators.FORM_ELEMENT.apply(FieldType.INPUT, RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))), RequestFields.VALUE.getDataPath()).equals(RequestConstants.FieldValues.PlaceHolders.UDF.apply(additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath())))) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -8732,9 +6640,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createUdfActionFAFR_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"picklist", "clear_field_value"},
 		tags = {},
 		description = "Test Clear Field Value Action execute on form load",
 		
@@ -8743,21 +6651,17 @@ public class RequestFAFR extends RequestBase {
 	public void checkClearPickListUdfValueActionExecuteOnFormLoad() {
 		try {
 			String templateName = random.generateRandomString(4);
-			
 			String option1 = random.generateRandomString(3);
 			String option2 = random.generateRandomString(3);
 			String option3 = random.generateRandomString(3);
 			JSONObject additionalFieldResponse = createPickListUdfWithThreeOptions(option1, option2, option3);
 			String fieldKey = additionalFieldResponse.getString(AdditionalFieldsFields.FIELD_KEY.getDataPath());
-			
 			JSONObject template = addTemplateWithNewField(fieldKey, templateName);
 			goToFormRulesInAdminTab();
 			chooseFormRule();
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
 			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
@@ -8768,14 +6672,10 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			actions.refreshPage();
-			
 			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
 			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
 			actions.click(AdminLocators.RequestFAFR.MATCH_BELOW_RULES_CHECK_BOX);
-			
 			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
 			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.CLEAR_FIELD_VALUE);
 			typeAndSelectOption(AdminLocators.RequestFAFR.CRITERIA_INPUT, additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath()));
@@ -8783,12 +6683,11 @@ public class RequestFAFR extends RequestBase {
 			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
 			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
 			actions.click(RequestLocators.Listview.YES_BUTTON_POPUP);
-			
 			openRequestAddForm(template);
 			if(actions.getText(ClientFrameworkLocators.FormBuilderLocators.SELECT_ELEMENT.apply(RequestConstants.DetailsPageGlobalActions.UDFFIELDS.apply(fieldKey))).equals(RequestConstants.FieldValues.PlaceHolders.UDF.apply(additionalFieldResponse.getString(AdditionalFieldsFields.NAME.getDataPath())))) {
-				addSuccessReport("Rule was executed successfully");
+			addSuccessReport("Rule was executed successfully");
 			}else {
-				addFailureReport("Unable to execute the Rule", "Expected value not present");
+			addFailureReport("Unable to execute the Rule", "Expected value not present");
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
@@ -10057,7 +7956,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"item", "is", "random", "", "group"},
+		dataIds = {"item", "is", "item", "Upgrade « MS Office « Software", "group"},
 		tags = {},
 		description = "Test Item conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0571"
@@ -10158,7 +8057,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"level", "is", "random", "", "group"},
+		dataIds = {"level", "is", "levels", "Tier 1", "group"},
 		tags = {},
 		description = "Test Level conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0575"
@@ -10507,7 +8406,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"mode", "is", "random", "", "group"},
+		dataIds = {"mode", "is", "modes", "E-Mail", "group"},
 		tags = {},
 		description = "Test Mode conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0585"
@@ -10602,7 +8501,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"priority", "is", "random", "", "group"},
+		dataIds = {"priority", "is", "priorities", "Low", "group"},
 		tags = {},
 		description = "Test Priority conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0595"
@@ -10697,7 +8596,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"request_type", "is", "random", "", "group"},
+		dataIds = {"request_type", "is", "request_types", "Incident", "group"},
 		tags = {},
 		description = "Test Request Type conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0599"
@@ -10790,9 +8689,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "createFAFRWithCondition_OFC",
+		group = "createFAFRWithCondition_OFC_AdminUser",
 		priority = Priority.MEDIUM,
-		dataIds = {"requester", "is", "random", "", "group"},
+		dataIds = {"requester", "is", "", "group"},
 		tags = {},
 		description = "Test Requester conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0603"
@@ -10801,8 +8700,7 @@ public class RequestFAFR extends RequestBase {
 		try {
 			String subject = LocalStorage.getAsString("subject_value");
 			openRequestAddFormFromLocalStorage();
-			User user = scenarioDetails.getUser(ScenarioUsers.TEST_USER_1);
-			RequestActionsUtils.selectRequesterInRequestFormPage(user.getMailId());
+			RequestActionsUtils.selectRequesterInRequestFormPage(sessionDetails.getAdmin().getMailId());
 			actions.formBuilder.fillSelectField(RequestFields.GROUP.getName(), RequestConstants.FieldValues.GROUP_HARDWAREPROBLEMS);
 			if(RequestUtil.getAttributeForInputField(actions.getElement(RequestLocators.Form.FIELD_INPUT.apply(RequestFields.SUBJECT.getDataPath())), RequestFields.VALUE.getDataPath()).equals(subject)) {
 				addSuccessReport("Rule was executed successfully");
@@ -11645,7 +9543,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"site", "is", "random", "", "group"},
+		dataIds = {"site", "is", "direct", "Base Site", "group"},
 		tags = {},
 		description = "Test Site conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0633"
@@ -11691,7 +9589,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"status", "is", "random", "", "group"},
+		dataIds = {"status", "is", "direct", "Open", "group"},
 		tags = {},
 		description = "Test Status conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0637"
@@ -11760,7 +9658,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"subcategory", "is", "random", "", "group"},
+		dataIds = {"subcategory", "is", "subcategory", "MS Office « Software", "group"},
 		tags = {},
 		description = "Test SubCategory conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0641"
@@ -12061,9 +9959,9 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "createFAFRWithCondition_OFC",
+		group = "createFAFRWithCondition_OFC_AdminUser",
 		priority = Priority.MEDIUM,
-		dataIds = {"technician", "is", "random", "", "group"},
+		dataIds = {"technician", "is", "", "group"},
 		tags = {},
 		description = "Test Technician conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0653",
@@ -12368,7 +10266,7 @@ public class RequestFAFR extends RequestBase {
 	@AutomaterScenario(
 		group = "createFAFRWithCondition_OFC",
 		priority = Priority.MEDIUM,
-		dataIds = {"urgency", "is", "random", "", "group"},
+		dataIds = {"urgency", "is", "urgencies", "Low", "group"},
 		tags = {},
 		description = "Test Urgency conditions execute on field Change",
 		id = "SDPOD-FL-S-FAFR-0665"
@@ -38932,46 +36830,23 @@ public class RequestFAFR extends RequestBase {
 	}
 	
 	@AutomaterScenario(
-		group = "RequestFAFR",
+		group = "createFAFRWithCondition_OFL",
 		priority = Priority.MEDIUM,
-		dataIds = {},
+		dataIds = {"requester.department", "is", "", ""},
 		tags = {},
 		description = "Test Requester conditions execute on form load",
 		
 		id = "SDPOD-FL-S-FAFR-0175"
 	)
 	public void checkRequesterDepartmentEmptyConditionExecuteOnFormLoad() throws BadResponseException, JSONException, SeleniumException, FileNotFoundException, DataNotFoundException {
-		String templateName = random.generateRandomString(4);
 		try {
-			String subject = random.generateRandomString(4);
-			
-			JSONObject template = addTemplate(templateName);
-			goToFormRulesInAdminTab();
-			chooseFormRule();
-			actions.click(AdminLocators.RequestFAFR.CREATE_RULE);
-			actions.type(AdminLocators.RequestFAFR.RULE_NAME_FIELD, random.generateRandomString(4));
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_COLUMN_UNDER_CONDITION);
-			actions.type(ClientFrameworkLocators.FormBuilderLocators.TYPE_DROPDOWN_SEARCH_INPUT, AdminConstants.RequestFAFR.Fields.REQUESTER);
-			actions.click(AdminLocators.RequestFAFR.SELECT_SUB_REQUESTER);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Fields.DEPARTMENT);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.FieldOperators.IS_EMPTY);
-			
-			actions.click(AdminLocators.RequestFAFR.FIRST_SELECT_ACTION_DROP_DOWN);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Actions.SET_VALUE_TO_FIELD);
-			actions.click(AdminLocators.RequestFAFR.SELECT_FIELD_UNDER_ACTIONS_IN_FIRST_ROW);
-			actions.formBuilder.typeAndSelectOption(AdminConstants.RequestFAFR.Fields.SUBJECT);
-			
-			actions.type(AdminLocators.RequestFAFR.CRITERIA_INPUT, subject);
-			
-			typeAndSelectOption(AdminLocators.RequestFAFR.SELECTED_TEMPLATES_INPUT_BOX, templateName);
-			
-			actions.click(AdminLocators.RequestFAFR.SAVE_RULE);
-			openRequestAddForm(template);
+			String subject = LocalStorage.getAsString("actionValue");
+			openRequestAddFormFromLocalStorage();
 			actions.click(RequestLocators.Form.SEARCH_REQ_NAME_IN_SDADMIN);
 			actions.click(RequestLocators.Form.FIRST_REQUESTER_IN_REQUEST_FORM_PAGE);
 			actions.formBuilder.fillTextField(RequestFields.SUBJECT.getName(), random.generateRandomString(4));
 			actions.click(ClientFrameworkLocators.FormBuilderLocators.FORM_SUBMIT);
+			storeRequestIdBySubject(random.generateRandomString(4));
 			actions.click(RequestLocators.Listview.EDIT_REQUEST_BUTTON);
 			if(RequestUtil.getAttributeForInputField(actions.getElement(RequestLocators.Form.FIELD_INPUT.apply(RequestFields.SUBJECT.getDataPath())), RequestFields.VALUE.getDataPath()).equals(subject)) {
 				addSuccessReport("Rule was executed successfully");
@@ -38980,8 +36855,6 @@ public class RequestFAFR extends RequestBase {
 			}
 		}catch(Exception exception) {
 			addFailureReport("Exception occured while running the case", exception.getMessage());
-		}finally {
-			deleteRequest(templateName);
 		}
 	}
 	
